@@ -1,4 +1,4 @@
-avr = ../..
+avr = ../../avr
 
 programmer = dragon_isp
 device = atmega328p
