@@ -62,6 +62,8 @@ void loader()
 				if (usart_read(&memory, sizeof(memory))) break;
 				void* position;
 				if (usart_read(&position, sizeof(position))) break;
+				size_t length;
+				if (usart_read(&length, sizeof(length))) break;
 				switch (memory)
 				{
 					case flash:
@@ -80,6 +82,8 @@ void loader()
 				if (usart_read(&memory, sizeof(memory))) break;
 				void* position;
 				if (usart_read(&position, sizeof(position))) break;
+				size_t length;
+				if (usart_read(&length, sizeof(length))) break;
 				switch (memory)
 				{
 					case flash:
