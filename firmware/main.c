@@ -15,11 +15,14 @@
 typedef enum { info = 0x0001, read = 0x0002, write = 0x0003 } command;
 typedef enum { flash = 0x0001, eeprom = 0x0002 } memory;
 
-uint8_t read_byte(void* position)
+void flash_read_page(void* position, void* data)
 {
-	return pgm_read_byte(position);
+	uint8_t* bytes = data;
+
+	for (uint8_t byte_index = 0; byte_index < SPM_PAGESIZE; byte_index++)
+		*bytes++ = pgm_read_byte(position + byte_index);
 }
-void write_page(void* position, void* data)
+void flash_write_page(void* position, void* data)
 {
 	uint8_t* bytes = data;
 
@@ -63,8 +66,9 @@ void loader()
 				{
 					case flash:
 					{
-						uint8_t byte = read_byte(position);
-						usart_write(&byte, sizeof(byte));
+						uint8_t data[SPM_PAGESIZE];
+						flash_read_page(position, &data);
+						usart_write(&data, sizeof(data));
 						break;
 					}
 				}
@@ -82,10 +86,7 @@ void loader()
 					{
 						uint8_t data[SPM_PAGESIZE];
 						usart_read(&data, sizeof(data));
-						write_page(position, &data);
-
-						uint8_t ack = 0x12;
-						usart_write(&ack, sizeof(ack));
+						flash_write_page(position, &data);
 						break;
 					}
 				}
