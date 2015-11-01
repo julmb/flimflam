@@ -1,8 +1,7 @@
 #include <basic.h>
+#include <gpio.h>
 #include <usart.h>
-
-#include <avr/pgmspace.h>
-#include <avr/boot.h>
+#include <memory.h>
 
 // TODO: remove display
 // TODO: remove unused includes
@@ -12,31 +11,8 @@
 // display display = display_initialize(pin_initialize(port_initialize(port_c), 5), pin_initialize(port_initialize(port_c), 4), pin_initialize(port_initialize(port_c), 3), port_initialize(port_d));
 // display_printf(display, "BL: 0x%04X", reset_type);
 
-typedef enum { info = 0x0001, read = 0x0002, write = 0x0003 } command;
+typedef enum { information = 0x0001, read = 0x0002, write = 0x0003 } command;
 typedef enum { flash = 0x0001, eeprom = 0x0002 } memory;
-
-void flash_read_page(void* position, void* data)
-{
-	uint8_t* bytes = data;
-
-	for (uint8_t byte_index = 0; byte_index < SPM_PAGESIZE; byte_index++)
-		*bytes++ = pgm_read_byte(position + byte_index);
-}
-void flash_write_page(void* position, void* data)
-{
-	uint8_t* bytes = data;
-
-	boot_page_erase(position);
-	boot_spm_busy_wait();
-
-	for (uint8_t byte_index = 0; byte_index < SPM_PAGESIZE; byte_index += 2)
-		boot_page_fill(position + byte_index, (*bytes++ << 0) | (*bytes++ << 8));
-
-	boot_page_write(position);
-	boot_spm_busy_wait();
-
-	boot_rww_enable();
-}
 
 void loader()
 {
@@ -50,26 +26,32 @@ void loader()
 
 		switch (command)
 		{
-			case info:
+			case information:
 			{
-				size_t page_size = SPM_PAGESIZE;
-				usart_write(&page_size, sizeof(page_size));
+				size_t flash_page_count = FLASH_PAGE_COUNT;
+				usart_write(&flash_page_count, sizeof(flash_page_count));
+				size_t flash_page_size = FLASH_PAGE_SIZE;
+				usart_write(&flash_page_size, sizeof(flash_page_size));
+				size_t eeprom_page_count = EEPROM_PAGE_COUNT;
+				usart_write(&eeprom_page_count, sizeof(eeprom_page_count));
+				size_t eeprom_page_size = EEPROM_PAGE_SIZE;
+				usart_write(&eeprom_page_size, sizeof(eeprom_page_size));
+				size_t ram_size = SRAM_SIZE;
+				usart_write(&ram_size, sizeof(ram_size));
 				break;
 			}
 			case read:
 			{
 				memory memory;
 				if (usart_read(&memory, sizeof(memory))) break;
-				void* position;
-				if (usart_read(&position, sizeof(position))) break;
-				size_t length;
-				if (usart_read(&length, sizeof(length))) break;
+				uint16_t page_index;
+				if (usart_read(&page_index, sizeof(page_index))) break;
 				switch (memory)
 				{
 					case flash:
 					{
-						uint8_t data[SPM_PAGESIZE];
-						flash_read_page(position, &data);
+						uint8_t data[FLASH_PAGE_SIZE];
+						flash_read_page(page_index, &data);
 						usart_write(&data, sizeof(data));
 						break;
 					}
@@ -80,17 +62,15 @@ void loader()
 			{
 				memory memory;
 				if (usart_read(&memory, sizeof(memory))) break;
-				void* position;
-				if (usart_read(&position, sizeof(position))) break;
-				size_t length;
-				if (usart_read(&length, sizeof(length))) break;
+				uint16_t page_index;
+				if (usart_read(&page_index, sizeof(page_index))) break;
 				switch (memory)
 				{
 					case flash:
 					{
-						uint8_t data[SPM_PAGESIZE];
+						uint8_t data[FLASH_PAGE_SIZE];
 						usart_read(&data, sizeof(data));
-						flash_write_page(position, &data);
+						flash_write_page(page_index, &data);
 						break;
 					}
 				}
@@ -102,11 +82,24 @@ void loader()
 	usart_dispose();
 }
 
+// TODO: remove debug stuff
 void main()
 {
+//	display display = display_initialize(pin_initialize(port_initialize(port_c), 5), pin_initialize(port_initialize(port_c), 4), pin_initialize(port_initialize(port_c), 3), port_initialize(port_d));
+//	display_printf(display, "0x%04X", FLASH_PAGE_COUNT);
+//	return;
+
 	reset_type reset_type = initialize();
 
-	if (reset_type == external) loader();
+	pin red = pin_output(port_initialize(port_d), 4, 0);
+	pin green = pin_output(port_initialize(port_d), 2, 0);
 
-	application();
+	if (reset_type == external)
+	{
+		pin_set(red);
+		loader();
+	}
+
+	pin_set(green);
+	start();
 }
