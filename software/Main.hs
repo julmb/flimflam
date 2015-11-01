@@ -1,49 +1,82 @@
-import Data.List
 import Data.Monoid
 import Data.Word
-import qualified Data.ByteString as BS
+import Data.Binary
+import Data.Binary.Put
+import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
-import Data.ByteString.Builder
-import Control.Monad
+import System.IO
 import System.Environment
 import System.Ftdi
 
-data Memory = Flash | Eeprom deriving (Eq, Show, Read)
-data Storage = Storage Memory Word16 Word16 deriving (Eq, Show, Read)
-data Command = Information | Read Storage | Write Storage deriving (Eq, Show, Read)
+-- TODO: see what happens when we write to bootloader flash and read it back before and afterwards
+-- TODO: see what happens when we read beyond the address space
+-- TODO: when writing a program, we should probably pad with 0x0000 (align correctly, maybe reject images with odd size), 0x0000 is nop and will skip to bootloader
+-- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
+-- TODO: add flimflam execution to application makefile to automatically flash the MCU
 
-buildMemory :: Memory -> Builder
-buildMemory Flash = word16LE 0x0001
-buildMemory Eeprom = word16LE 0x0002
+data MemoryType = Flash | Eeprom | Calibration | Fuse | Lock | Signature deriving (Eq, Show, Read)
+data FirmwareCommand = GetPageCount MemoryType | GetPageLength MemoryType | ReadPage MemoryType Word8 | WritePage MemoryType Word8 deriving (Eq, Show, Read)
 
-buildStorage :: Storage -> Builder
-buildStorage (Storage memory address length) = buildMemory memory <> word16LE address <> word16LE length
+instance Binary MemoryType where
+	put Flash = putWord16le 0x0001
+	put Eeprom = putWord16le 0x0002
+	put Calibration = putWord16le 0x0003
+	put Fuse = putWord16le 0x0004
+	put Lock = putWord16le 0x0005
+	put Signature = putWord16le 0x0006
+	get = undefined
 
-buildCommand :: Command -> Builder
-buildCommand Information = word16LE 0x0001
-buildCommand (Read storage) = word16LE 0x0002 <> buildStorage storage
-buildCommand (Write storage) = word16LE 0x0003 <> buildStorage storage
+instance Binary FirmwareCommand where
+	put (GetPageCount memoryType) = putWord16le 0x0001 >> put memoryType
+	put (GetPageLength memoryType) = putWord16le 0x0002 >> put memoryType
+	put (ReadPage memoryType pageIndex) = putWord16le 0x0003 >> put memoryType >> put pageIndex
+	put (WritePage memoryType pageIndex) = putWord16le 0x0004 >> put memoryType >> put pageIndex
+	get = undefined
 
-responseLengthCommand :: Command -> Integer
-responseLengthCommand Information = 0x0001
-responseLengthCommand (Read (Storage memory address length)) = fromIntegral length
-responseLengthCommand (Write storage) = 0x0000
+getResponseLength :: Context -> FirmwareCommand -> IO Integer
+getResponseLength _ (GetPageCount _) = return 2
+getResponseLength _ (GetPageLength _) = return 2
+getResponseLength context (ReadPage memoryType _) = getPageLength context memoryType >>= return . fromIntegral
+getResponseLength context (WritePage memoryType _) = getPageLength context memoryType >>= return . fromIntegral
 
-execute :: Context -> Command -> IO ()
-execute context command = do
-	send context (toLazyByteString (buildCommand command))
-	result <- receive context (responseLengthCommand command)
-	print (BL.unpack result)
+-- TODO: check if the last byte is 0x00, cut it from the bytestring
+executeFirmwareCommand :: Context -> FirmwareCommand -> IO BL.ByteString
+executeFirmwareCommand context firmwareCommand = do
+	hPutStrLn stderr ("getting response length of " ++ show firmwareCommand)
+	responseLength <- getResponseLength context firmwareCommand
+	hPutStrLn stderr ("response length of " ++ show firmwareCommand ++ ": " ++ show responseLength)
+	hPutStrLn stderr ("sending " ++ show firmwareCommand)
+	send context (encode firmwareCommand)
+	hPutStrLn stderr ("awaiting response to " ++ show firmwareCommand)
+	response <- receive context (responseLength + 1)
+	hPutStrLn stderr ("received response to " ++ show firmwareCommand ++ ": " ++ show (BL.unpack response))
+	return (BL.init response)
 
-run :: Context -> IO ()
-run context = do
-	parameters <- getArgs
-	when (genericLength parameters /= 1) $ error "number of parameters was not 1"
-	let command = read (genericIndex parameters 0)
-	execute context command
+getPageLength :: Context -> MemoryType -> IO Word16
+getPageLength context memoryType = executeFirmwareCommand context (GetPageLength memoryType) >>= return . runGet getWord16le
+
+readPage :: Context -> MemoryType -> Word8 -> IO BL.ByteString
+readPage context memoryType pageIndex = executeFirmwareCommand context (ReadPage memoryType pageIndex)
+
+data Command = Program | Configure | Dump MemoryType Word16 Word16 | Load MemoryType Word16 deriving (Eq, Show, Read)
+
+readMemory :: Context -> MemoryType -> Word16 -> Word16 -> IO BL.ByteString
+readMemory _ _ _ 0 = return mempty
+readMemory context memoryType position length = do
+	pageLength <- getPageLength context memoryType
+	let pageIndex = fromIntegral (position `div` pageLength)
+	let size = min pageLength length
+	page <- readPage context memoryType pageIndex
+	rest <- readMemory context memoryType (position + size) (length - size)
+	return (BL.take (fromIntegral size) page <> rest)
+
+executeCommand :: Context -> Command -> IO ()
+executeCommand context (Dump memoryType position length) = readMemory context memoryType position length >>= BL.putStr
 
 main :: IO ()
-main = withContext
-	Device { vendorID = 0x0403, productID = 0x6001, System.Ftdi.index = 0}
-	Parameters { baudRate = 20000 }
-	run
+main = do
+	let device = Device { vendorID = 0x0403, productID = 0x6001, System.Ftdi.index = 0}
+	let parameters = Parameters { baudRate = 20000 }
+	command <- getArgs >>= return . read . unwords
+	let run context = executeCommand context command
+	withContext device parameters run
