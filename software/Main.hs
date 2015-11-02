@@ -17,20 +17,19 @@ power :: (a -> a) -> Integer -> (a -> a)
 power _ 0 = id
 power f n = f . power f (n - 1)
 
-fold :: (x -> a -> a) -> [x] -> a -> a
-fold _ [] = id
-fold f (x : xs) = fold f xs . f x
+-- alternative definition:
+-- fold _ [] = id
+-- fold f (x : xs) = fold f xs . f x
+fold :: Foldable t => (x -> a -> a) -> t x -> a -> a
+fold = flip . foldl . flip
 
-crc16 :: Word8 -> Word16 -> Word16
-crc16 byte = power step 8 . initial where
+crc16Word8 :: Word8 -> Word16 -> Word16
+crc16Word8 byte = power step 8 . initial where
 	initial value = fromIntegral byte `xor` value
 	step value = if testBit value 0 then shiftR value 1 `xor` 0xA001 else shiftR value 1
 
-crc16Word8 :: Word8 -> Word16
-crc16Word8 word8 = crc16 word8 0
-
-crc16ByteString :: BL.ByteString -> Word16
-crc16ByteString byteString = BL.foldl (flip crc16) 0 byteString
+crc16ByteString :: BL.ByteString -> Word16 -> Word16
+crc16ByteString = flip (BL.foldl (flip crc16Word8))
 --
 
 data FlimFlamException = ResponseException String String deriving Typeable
