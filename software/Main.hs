@@ -1,18 +1,53 @@
 import Data.Monoid
 import Data.Word
+import Data.Bits
 import Data.Binary
 import Data.Binary.Put
 import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
+import Data.Typeable
+import Control.Monad
+import Control.Exception
 import System.IO
 import System.Environment
 import System.Ftdi
+
+-- TODO: move this to linca
+power :: (a -> a) -> Integer -> (a -> a)
+power _ 0 = id
+power f n = f . power f (n - 1)
+
+fold :: (x -> a -> a) -> [x] -> a -> a
+fold _ [] = id
+fold f (x : xs) = fold f xs . f x
+
+crc16 :: Word8 -> Word16 -> Word16
+crc16 byte = power step 8 . initial where
+	initial value = fromIntegral byte `xor` value
+	step value = if testBit value 0 then shiftR value 1 `xor` 0xA001 else shiftR value 1
+
+crc16Word8 :: Word8 -> Word16
+crc16Word8 word8 = crc16 word8 0
+
+crc16ByteString :: BL.ByteString -> Word16
+crc16ByteString byteString = BL.foldl (flip crc16) 0 byteString
+--
+
+data FlimFlamException = ResponseException String String deriving Typeable
+
+instance Show FlimFlamException where
+	show (ResponseException location message) = location ++ ": " ++ message
+instance Exception FlimFlamException
 
 -- TODO: see what happens when we write to bootloader flash and read it back before and afterwards
 -- TODO: see what happens when we read beyond the address space
 -- TODO: when writing a program, we should probably pad with 0x0000 (align correctly, maybe reject images with odd size), 0x0000 is nop and will skip to bootloader
 -- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
+-- TODO: can we use the parser monad Get for something?
+-- TODO: can we get rid of most of the bytestring dependencies, or at least the qualified import
+-- TODO: implement CRC16 checking + ack
+-- TODO: extract modules
 
 data MemoryType = Flash | Eeprom | Calibration | Fuse | Lock | Signature deriving (Eq, Show, Read)
 data FirmwareCommand = GetPageCount MemoryType | GetPageLength MemoryType | ReadPage MemoryType Word8 | WritePage MemoryType Word8 deriving (Eq, Show, Read)
@@ -37,26 +72,30 @@ getResponseLength :: Context -> FirmwareCommand -> IO Integer
 getResponseLength _ (GetPageCount _) = return 2
 getResponseLength _ (GetPageLength _) = return 2
 getResponseLength context (ReadPage memoryType _) = getPageLength context memoryType >>= return . fromIntegral
-getResponseLength context (WritePage memoryType _) = getPageLength context memoryType >>= return . fromIntegral
+getResponseLength _ (WritePage _ _) = return 0
 
 -- TODO: check if the last byte is 0x00, cut it from the bytestring
-executeFirmwareCommand :: Context -> FirmwareCommand -> IO BL.ByteString
-executeFirmwareCommand context firmwareCommand = do
-	hPutStrLn stderr ("getting response length of " ++ show firmwareCommand)
+executeFirmwareCommand :: Context -> FirmwareCommand -> BL.ByteString -> IO BL.ByteString
+executeFirmwareCommand context firmwareCommand commandData = do
+	hPutStrLn stderr (show firmwareCommand)
 	responseLength <- getResponseLength context firmwareCommand
-	hPutStrLn stderr ("response length of " ++ show firmwareCommand ++ ": " ++ show responseLength)
-	hPutStrLn stderr ("sending " ++ show firmwareCommand)
 	send context (encode firmwareCommand)
-	hPutStrLn stderr ("awaiting response to " ++ show firmwareCommand)
+	send context commandData
 	response <- receive context (responseLength + 1)
-	hPutStrLn stderr ("received response to " ++ show firmwareCommand ++ ": " ++ show (BL.unpack response))
+	when (BL.last response /= 0x00) $ throwIO (ResponseException "executeFirmwareCommand" "foo")
 	return (BL.init response)
 
+getPageCount :: Context -> MemoryType -> IO Word16
+getPageCount context memoryType = executeFirmwareCommand context (GetPageCount memoryType) mempty >>= return . runGet getWord16le
+
 getPageLength :: Context -> MemoryType -> IO Word16
-getPageLength context memoryType = executeFirmwareCommand context (GetPageLength memoryType) >>= return . runGet getWord16le
+getPageLength context memoryType = executeFirmwareCommand context (GetPageLength memoryType) mempty >>= return . runGet getWord16le
 
 readPage :: Context -> MemoryType -> Word8 -> IO BL.ByteString
-readPage context memoryType pageIndex = executeFirmwareCommand context (ReadPage memoryType pageIndex)
+readPage context memoryType pageIndex = executeFirmwareCommand context (ReadPage memoryType pageIndex) mempty
+
+writePage :: Context -> MemoryType -> Word8 -> BL.ByteString -> IO ()
+writePage context memoryType pageIndex pageData = executeFirmwareCommand context (ReadPage memoryType pageIndex) pageData >> return ()
 
 data Command = Program | Configure | Dump MemoryType Word16 Word16 | Load MemoryType Word16 deriving (Eq, Show, Read)
 
@@ -70,6 +109,7 @@ readMemory context memoryType position length = do
 	rest <- readMemory context memoryType (position + size) (length - size)
 	return (BL.take (fromIntegral size) page <> rest)
 
+-- TODO: can we start outputting stuff before we're finished reading?
 executeCommand :: Context -> Command -> IO ()
 executeCommand context (Dump memoryType position length) = readMemory context memoryType position length >>= BL.putStr
 
