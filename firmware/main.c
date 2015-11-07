@@ -2,6 +2,7 @@
 #include <gpio.h>
 #include <usart.h>
 #include <memory.h>
+#include <crc.h>
 
 // TODO: remove display
 // TODO: remove unused includes
@@ -11,6 +12,18 @@
 
 typedef enum { get_page_count = 0x0001, get_page_length = 0x0002, read_page = 0x0003, write_page = 0x0004 } command;
 typedef enum { flash = 0x0001, eeprom = 0x0002, calibration = 0x0003, fuse = 0x0004, lock = 0x0005, signature = 0x0006 } memory;
+
+void usart_write_checked(void* data, size_t length)
+{
+	uint16_t crc = crc16(data, length, 0);
+
+	usart_write(data, length);
+	usart_write(&crc, sizeof(crc));
+}
+void usart_write_checked_size(size_t size)
+{
+	usart_write_checked(&size, sizeof(size));
+}
 
 void loader()
 {
@@ -33,18 +46,8 @@ void loader()
 
 				switch (memory)
 				{
-					case flash:
-					{
-						size_t flash_page_count = FLASH_PAGE_COUNT;
-						usart_write(&flash_page_count, sizeof(flash_page_count));
-						break;
-					}
-					case eeprom:
-					{
-						size_t eeprom_page_count = EEPROM_PAGE_COUNT;
-						usart_write(&eeprom_page_count, sizeof(eeprom_page_count));
-						break;
-					}
+					case flash: usart_write_checked_size(FLASH_PAGE_COUNT); break;
+					case eeprom: usart_write_checked_size(EEPROM_PAGE_COUNT); break;
 				}
 				break;
 			}
@@ -55,18 +58,8 @@ void loader()
 
 				switch (memory)
 				{
-					case flash:
-					{
-						size_t flash_page_length = FLASH_PAGE_LENGTH;
-						usart_write(&flash_page_length, sizeof(flash_page_length));
-						break;
-					}
-					case eeprom:
-					{
-						size_t eeprom_page_length = EEPROM_PAGE_LENGTH;
-						usart_write(&eeprom_page_length, sizeof(eeprom_page_length));
-						break;
-					}
+					case flash: usart_write_checked_size(FLASH_PAGE_LENGTH); break;
+					case eeprom: usart_write_checked_size(EEPROM_PAGE_LENGTH); break;
 				}
 				break;
 			}
@@ -83,14 +76,14 @@ void loader()
 					{
 						uint8_t data[FLASH_PAGE_LENGTH];
 						flash_read_page(page_index, data);
-						usart_write(&data, sizeof(data));
+						usart_write_checked(&data, sizeof(data));
 						break;
 					}
 					case eeprom:
 					{
 						uint8_t data[EEPROM_PAGE_LENGTH];
 						eeprom_read_page(page_index, data);
-						usart_write(&data, sizeof(data));
+						usart_write_checked(&data, sizeof(data));
 						break;
 					}
 				}
@@ -110,6 +103,7 @@ void loader()
 						uint8_t data[FLASH_PAGE_LENGTH];
 						usart_read(&data, sizeof(data));
 						flash_write_page(page_index, &data);
+						usart_write_checked(0, 0);
 						break;
 					}
 					case eeprom:
@@ -117,15 +111,13 @@ void loader()
 						uint8_t data[EEPROM_PAGE_LENGTH];
 						usart_read(&data, sizeof(data));
 						eeprom_write_page(page_index, &data);
+						usart_write_checked(0, 0);
 						break;
 					}
 				}
 				break;
 			}
 		}
-
-		uint8_t termination = 0x00;
-		usart_write(&termination, sizeof(termination));
 	}
 
 	usart_dispose();
