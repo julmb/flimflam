@@ -13,11 +13,12 @@ import System.IO
 import System.Environment
 import System.Ftdi
 import Linca.Basic
+import Linca.Scalar
 
 data FlimFlamException = ResponseException String String deriving Typeable
 
 instance Show FlimFlamException where
-	show (ResponseException location message) = location ++ ": " ++ message
+	show (ResponseException location message) = printf "%s: %s" location message
 instance Exception FlimFlamException
 
 -- TODO: see what happens when we write to bootloader flash and read it back before and afterwards
@@ -27,7 +28,6 @@ instance Exception FlimFlamException
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
 -- TODO: can we use the parser monad Get for something?
 -- TODO: can we get rid of most of the bytestring dependencies, or at least the qualified import
--- TODO: implement CRC16 checking + ack
 -- TODO: extract modules
 
 data MemoryType = Flash | Eeprom | Calibration | Fuse | Lock | Signature deriving (Eq, Show, Read)
@@ -49,6 +49,8 @@ instance Binary FirmwareCommand where
 	put (ReadPage memoryType pageIndex) = putWord16le 0x0003 >> put memoryType >> put pageIndex
 	put (WritePage memoryType pageIndex) = putWord16le 0x0004 >> put memoryType >> put pageIndex
 	get = undefined
+
+data DeviceInformation = DeviceInformation { pageCount :: MemoryType -> Word16, pageLength :: MemoryType -> Word16 }
 
 getResponseLength :: Context -> FirmwareCommand -> IO Integer
 getResponseLength _ (GetPageCount _) = return 2
@@ -81,23 +83,47 @@ readPage :: Context -> MemoryType -> Word8 -> IO BL.ByteString
 readPage context memoryType pageIndex = executeFirmwareCommand context (ReadPage memoryType pageIndex) mempty
 
 writePage :: Context -> MemoryType -> Word8 -> BL.ByteString -> IO ()
-writePage context memoryType pageIndex pageData = executeFirmwareCommand context (ReadPage memoryType pageIndex) pageData >> return ()
+writePage context memoryType pageIndex pageData = executeFirmwareCommand context (WritePage memoryType pageIndex) pageData >> return ()
 
-data Command = Program | Configure | Dump MemoryType Word16 Word16 | Load MemoryType Word16 deriving (Eq, Show, Read)
+--writeToPage Context -> MemoryType -> Word8 -> Word16
+--writeToPage context memoryType pageIndex chunk offset
 
 readMemory :: Context -> MemoryType -> Word16 -> Word16 -> IO BL.ByteString
 readMemory _ _ _ 0 = return mempty
-readMemory context memoryType position length = do
+readMemory context memoryType offset length = do
 	pageLength <- getPageLength context memoryType
-	let pageIndex = fromIntegral (position `div` pageLength)
-	let size = min pageLength length
-	page <- readPage context memoryType pageIndex
-	rest <- readMemory context memoryType (position + size) (length - size)
-	return (BL.take (fromIntegral size) page <> rest)
+	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
+	let readLength = min length (pageLength - pageOffset)
+	pageData <- readPage context memoryType pageIndex
+	let readChunk = BL.take (fromIntegral readLength) $ BL.drop (fromIntegral pageOffset) $ pageData
+	readRest <- readMemory context memoryType (offset + readLength) (length - readLength)
+	return (readChunk <> readRest)
 
--- TODO: can we start outputting stuff before we're finished reading?
+-- TODO: extract writePage
+writeMemory :: Context -> MemoryType -> Word16 -> Word16 -> BL.ByteString -> IO ()
+writeMemory _ _ _ 0 _ = return ()
+writeMemory context memoryType offset length writeData = do
+	pageLength <- getPageLength context memoryType
+	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
+	let writeLength = min length (pageLength - pageOffset)
+	let writeChunk = BL.take (fromIntegral writeLength) writeData
+	if pageOffset == 0 && writeLength == pageLength
+	then writePage context memoryType pageIndex writeChunk
+	else do
+		pageData <- readPage context memoryType pageIndex
+		let newPageData = BL.take (fromIntegral pageOffset) pageData <> writeChunk <> BL.drop (fromIntegral (pageOffset + writeLength)) pageData
+		writePage context memoryType pageIndex newPageData
+	writeMemory context memoryType (offset + writeLength) (length - writeLength) (BL.drop (fromIntegral writeLength) writeData)
+
+data Command = Program | Configure | Dump MemoryType Word16 Word16 | Load MemoryType Word16 deriving (Eq, Show, Read)
+
 executeCommand :: Context -> Command -> IO ()
-executeCommand context (Dump memoryType position length) = readMemory context memoryType position length >>= BL.putStr
+executeCommand context (Dump memoryType position length) = do
+	readData <- readMemory context memoryType position length
+	BL.putStr readData
+executeCommand context (Load memoryType position) = do
+	writeData <- BL.getContents
+	writeMemory context memoryType position (fromIntegral (BL.length writeData)) writeData
 
 main :: IO ()
 main = do
