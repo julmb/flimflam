@@ -20,7 +20,7 @@ import FlimFlam.Exception
 
 executeFirmwareCommand :: Context -> FirmwareCommand -> Natural -> BL.ByteString -> IO BL.ByteString
 executeFirmwareCommand context command responseLength commandData = do
-	hPutStrLn stderr $ printf "executing firmware command %s, expected response length %d..." (show command) responseLength
+	hPutStrLn stderr $ show command
 	send context (encode command)
 	send context commandData
 	response <- receive context responseLength
@@ -36,10 +36,9 @@ executeFirmwareCommand context command responseLength commandData = do
 getDeviceInformation :: Context -> IO DeviceInformation
 getDeviceInformation context = executeFirmwareCommand context GetDeviceInformation deviceInformationLength mempty >>= return . decode
 
--- TODO: shorten where part
 readPage :: Context -> DeviceInformation -> MemoryType -> Natural -> IO BL.ByteString
 readPage context deviceInformation memoryType pageIndex
-	| pageIndex >= pageCount = error $ printf "readPage: parameter pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
+	| pageIndex >= pageCount = error $ printf "readPage: pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
 	| otherwise = executeFirmwareCommand context (ReadPage memoryType (fromIntegral pageIndex)) pageLength mempty
 	where
 		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
@@ -47,8 +46,8 @@ readPage context deviceInformation memoryType pageIndex
 
 writePage :: Context -> DeviceInformation -> MemoryType -> Natural -> BL.ByteString -> IO ()
 writePage context deviceInformation memoryType pageIndex pageData
-	| pageIndex >= pageCount = error $ printf "writePage: parameter pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
-	| pageLength /= pageDataLength = error $ printf "writePage: length of parameter pageData (0x%X) did not match page length (0x%X)" pageDataLength pageLength
+	| pageIndex >= pageCount = error $ printf "writePage: pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
+	| pageDataLength /= pageLength = error $ printf "writePage: length of pageData (0x%X) did not match the page length (0x%X)" pageDataLength pageLength
 	| otherwise = executeFirmwareCommand context (WritePage memoryType (fromIntegral pageIndex)) 0 pageData >> return ()
 	where
 		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
@@ -56,44 +55,54 @@ writePage context deviceInformation memoryType pageIndex pageData
 		pageDataLength = fromIntegral (BL.length pageData)
 
 
--- TODO: error handling, or is the low-level one enough? what is missing here?
 readFromPage :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> Natural -> IO BL.ByteString
-readFromPage context deviceInformation memoryType index offset length = do
-	pageData <- readPage context deviceInformation memoryType index
-	return $ BL.take (fromIntegral length) $ BL.drop (fromIntegral offset) $ pageData
+readFromPage context deviceInformation memoryType pageIndex pageOffset length
+	| pageIndex >= pageCount = error $ printf "readFromPage: pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
+	| pageOffset + length > pageLength = error $ printf "readFromPage: pageOffset + length (0x%X) was greater than the page length (0x%X)" (pageOffset + length) pageLength
+	| length == 0 = return mempty
+	| otherwise = do
+		pageData <- readPage context deviceInformation memoryType pageIndex
+		return $ BL.take (fromIntegral length) $ BL.drop (fromIntegral pageOffset) $ pageData
+	where
+		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
+		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
 
 writeToPage :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> BL.ByteString -> IO ()
-writeToPage context deviceInformation memoryType index offset chunk
-	| offset == 0 && chunkLength == pageLength = writePage context deviceInformation memoryType index chunk
+writeToPage context deviceInformation memoryType pageIndex pageOffset chunk
+	| pageIndex >= pageCount = error $ printf "writeToPage: pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
+	| pageOffset + length > pageLength = error $ printf "writeToPage: pageOffset + length (0x%X) was greater than the page length (0x%X)" (pageOffset + length) pageLength
+	| length == 0 = return ()
+	| pageOffset == 0 && length == pageLength = writePage context deviceInformation memoryType pageIndex chunk
 	| otherwise = do
-		pageData <- readPage context deviceInformation memoryType index
-		let newPageData = BL.take (fromIntegral offset) pageData <> chunk <> BL.drop (fromIntegral (offset + chunkLength)) pageData
-		writePage context deviceInformation memoryType index newPageData
+		pageData <- readPage context deviceInformation memoryType pageIndex
+		let newPageData = BL.take (fromIntegral pageOffset) pageData <> chunk <> BL.drop (fromIntegral (pageOffset + length)) pageData
+		writePage context deviceInformation memoryType pageIndex newPageData
 	where
+		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-		chunkLength = fromIntegral (BL.length chunk)
+		length = fromIntegral (BL.length chunk)
 
 
 readMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> IO BL.ByteString
-readMemory _ _ _ _ 0 = return mempty
-readMemory context deviceInformation memoryType offset length = do
-	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
-	let readLength = min length (pageLength - pageOffset)
-	readChunk <- readFromPage context deviceInformation memoryType pageIndex pageOffset readLength
-	readRest <- readMemory context deviceInformation memoryType (offset + readLength) (length - readLength)
-	return (readChunk <> readRest)
+readMemory context deviceInformation memoryType offset length
+	| length == 0 = return mempty
+	| otherwise = do
+		let (pageIndex, pageOffset) = normalize pageLength (0, offset)
+		let readLength = min length (pageLength - pageOffset)
+		readChunk <- readFromPage context deviceInformation memoryType pageIndex pageOffset readLength
+		readRest <- readMemory context deviceInformation memoryType (offset + readLength) (length - readLength)
+		return (readChunk <> readRest)
 	where
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
 
-writeMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> BL.ByteString -> IO ()
-writeMemory _ _ _ _ 0 _ = return ()
-writeMemory context deviceInformation memoryType offset length chunk = do
-	when (length > chunkLength) $
-		error $ printf "writeMemory: parameter length (0x%04X) was larger than the length of parameter writeData (0x%04X)" length chunkLength
-	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
-	let writeLength = min length (pageLength - pageOffset)
-	writeToPage context deviceInformation memoryType pageIndex pageOffset (BL.take (fromIntegral writeLength) chunk)
-	writeMemory context deviceInformation memoryType (offset + writeLength) (length - writeLength) (BL.drop (fromIntegral writeLength) chunk)
+writeMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> BL.ByteString -> IO ()
+writeMemory context deviceInformation memoryType offset chunk
+	| length == 0 = return ()
+	| otherwise = do
+		let (pageIndex, pageOffset) = normalize pageLength (0, offset)
+		let writeLength = min length (pageLength - pageOffset)
+		writeToPage context deviceInformation memoryType pageIndex pageOffset (BL.take (fromIntegral writeLength) chunk)
+		writeMemory context deviceInformation memoryType (offset + writeLength) (BL.drop (fromIntegral writeLength) chunk)
 	where
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-		chunkLength = fromIntegral (BL.length chunk)
+		length = fromIntegral (BL.length chunk)

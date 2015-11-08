@@ -1,7 +1,5 @@
 import Numeric.Natural
 import qualified Data.ByteString.Lazy as BL
-import Text.Printf
-import System.IO
 import System.Environment
 import System.Ftdi
 import FlimFlam.Memory
@@ -17,12 +15,10 @@ data Command = Program | Configure | Dump MemoryType Natural Natural | Load Memo
 executeCommand :: Context -> Command -> IO ()
 executeCommand context (Dump memoryType position length) = do
 	deviceInformation <- getDeviceInformation context
-	readData <- readMemory context deviceInformation memoryType position length
-	BL.putStr readData
+	readMemory context deviceInformation memoryType position length >>= BL.putStr
 executeCommand context (Load memoryType position) = do
 	deviceInformation <- getDeviceInformation context
-	writeData <- BL.getContents
-	writeMemory context deviceInformation memoryType position (fromIntegral (BL.length writeData)) writeData
+	BL.getContents >>= writeMemory context deviceInformation memoryType position
 executeCommand context (Command command responseLength) = BL.getContents >>= executeFirmwareCommand context command responseLength >>= BL.putStr
 
 -- TODO: add help screen
@@ -30,10 +26,6 @@ main :: IO ()
 main = do
 	let device = Device { vendorID = 0x0403, productID = 0x6001, System.Ftdi.index = 0}
 	let parameters = Parameters { baudRate = 20000 }
-	hPutStrLn stderr $ printf "parsing parameters..."
 	command <- getArgs >>= return . read . unwords
-	let run context = do
-		hPutStrLn stderr $ printf "executing command..."
-		executeCommand context command
-	hPutStrLn stderr $ printf "opening FTDI device..."
+	let run context = executeCommand context command
 	withContext device parameters run
