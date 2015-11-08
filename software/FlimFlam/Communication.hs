@@ -12,6 +12,7 @@ import System.IO
 import System.Ftdi
 import Linca.Basic
 import Linca.Scalar
+import Linca.Range
 import FlimFlam.Memory
 import FlimFlam.FirmwareCommand
 import FlimFlam.DeviceInformation
@@ -35,51 +36,67 @@ executeFirmwareCommand context command responseLength commandData = do
 getDeviceInformation :: Context -> IO DeviceInformation
 getDeviceInformation context = executeFirmwareCommand context GetDeviceInformation deviceInformationLength mempty >>= return . decode
 
-readPage :: Context -> DeviceInformation -> MemoryType -> Word8 -> IO BL.ByteString
-readPage context deviceInformation memoryType index = do
-	let pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-	executeFirmwareCommand context (ReadPage memoryType index) (fromIntegral pageLength) mempty
+-- TODO: we don't need the lower bound if it's a Natural
+-- TODO: shorten where part
+readPage :: Context -> DeviceInformation -> MemoryType -> Integer -> IO BL.ByteString
+readPage context deviceInformation memoryType pageIndex
+	| outside pageRange pageIndex = rangeError "readPage" "pageIndex" pageRange pageIndex
+	| otherwise = executeFirmwareCommand context (ReadPage memoryType (fromIntegral pageIndex)) pageLength mempty
+	where
+		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
+		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
+		pageRange = range 0 pageCount
 
-writePage :: Context -> DeviceInformation -> MemoryType -> Word8 -> BL.ByteString -> IO ()
-writePage context deviceInformation memoryType index pageData = do
-	let pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-	when (BL.length pageData /= fromIntegral pageLength) $
-		error $ printf "writePage: length of parameter pageData (0x%04X) did not match page length (0x%04X)" (BL.length pageData) pageLength
-	executeFirmwareCommand context (WritePage memoryType index) 0 pageData >> return ()
+writePage :: Context -> DeviceInformation -> MemoryType -> Integer -> BL.ByteString -> IO ()
+writePage context deviceInformation memoryType pageIndex pageData
+	| outside pageRange pageIndex = rangeError "writePage" "pageIndex" pageRange pageIndex
+	| pageLength /= pageDataLength = error $ printf "writePage: length of parameter pageData (0x%X) did not match page length (0x%X)" pageDataLength pageLength
+	| otherwise = executeFirmwareCommand context (WritePage memoryType (fromIntegral pageIndex)) 0 pageData >> return ()
+	where
+		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
+		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
+		pageRange = range 0 pageCount
+		pageDataLength = fromIntegral (BL.length pageData)
 
 
-readFromPage :: Context -> DeviceInformation -> MemoryType -> Word8 -> Word16 -> Word16 -> IO BL.ByteString
+-- TODO: error handling, or is the low-level one enough? what is missing here?
+readFromPage :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> Integer -> IO BL.ByteString
 readFromPage context deviceInformation memoryType index offset length = do
 	pageData <- readPage context deviceInformation memoryType index
 	return $ BL.take (fromIntegral length) $ BL.drop (fromIntegral offset) $ pageData
 
-writeToPage :: Context -> DeviceInformation -> MemoryType -> Word8 -> Word16 -> BL.ByteString -> IO ()
+writeToPage :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> BL.ByteString -> IO ()
 writeToPage context deviceInformation memoryType index offset chunk
-	| offset == 0 && chunkLength == fromIntegral pageLength = writePage context deviceInformation memoryType index chunk
+	| offset == 0 && chunkLength == pageLength = writePage context deviceInformation memoryType index chunk
 	| otherwise = do
 		pageData <- readPage context deviceInformation memoryType index
-		let newPageData = BL.take (fromIntegral offset) pageData <> chunk <> BL.drop (fromIntegral offset + chunkLength) pageData
+		let newPageData = BL.take (fromIntegral offset) pageData <> chunk <> BL.drop (fromIntegral (offset + chunkLength)) pageData
 		writePage context deviceInformation memoryType index newPageData
 	where
-		chunkLength = BL.length chunk
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
+		chunkLength = fromIntegral (BL.length chunk)
 
 
-readMemory :: Context -> DeviceInformation -> MemoryType -> Word16 -> Word16 -> IO BL.ByteString
+readMemory :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> IO BL.ByteString
 readMemory _ _ _ _ 0 = return mempty
 readMemory context deviceInformation memoryType offset length = do
-	let pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
 	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
 	let readLength = min length (pageLength - pageOffset)
 	readChunk <- readFromPage context deviceInformation memoryType pageIndex pageOffset readLength
 	readRest <- readMemory context deviceInformation memoryType (offset + readLength) (length - readLength)
 	return (readChunk <> readRest)
+	where
+		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
 
-writeMemory :: Context -> DeviceInformation -> MemoryType -> Word16 -> Word16 -> BL.ByteString -> IO ()
+writeMemory :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> BL.ByteString -> IO ()
 writeMemory _ _ _ _ 0 _ = return ()
-writeMemory context deviceInformation memoryType offset length writeData = do
-	let pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
+writeMemory context deviceInformation memoryType offset length chunk = do
+	when (length > chunkLength) $
+		error $ printf "writeMemory: parameter length (0x%04X) was larger than the length of parameter writeData (0x%04X)" length chunkLength
 	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
 	let writeLength = min length (pageLength - pageOffset)
-	writeToPage context deviceInformation memoryType pageIndex pageOffset (BL.take (fromIntegral writeLength) writeData)
-	writeMemory context deviceInformation memoryType (offset + writeLength) (length - writeLength) (BL.drop (fromIntegral writeLength) writeData)
+	writeToPage context deviceInformation memoryType pageIndex pageOffset (BL.take (fromIntegral writeLength) chunk)
+	writeMemory context deviceInformation memoryType (offset + writeLength) (length - writeLength) (BL.drop (fromIntegral writeLength) chunk)
+	where
+		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
+		chunkLength = fromIntegral (BL.length chunk)

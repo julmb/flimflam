@@ -6,11 +6,14 @@ import Data.Binary
 import Data.Binary.Get
 import FlimFlam.Memory
 
-data MemoryInformation = MemoryInformation { memoryPageCount :: Word16, memoryPageLength :: Word16 } deriving (Eq, Show, Read)
+data MemoryInformation = MemoryInformation { memoryPageCount :: Integer, memoryPageLength :: Integer } deriving (Eq, Show, Read)
 
 instance Binary MemoryInformation where
 	put = undefined
-	get = MemoryInformation <$> getWord16le <*> getWord16le
+	get = do
+		pageCount <- getWord16le
+		pageLength <- getWord16le
+		return (MemoryInformation (fromIntegral pageCount) (fromIntegral pageLength))
 
 memoryInformationLength :: Integer
 memoryInformationLength = 2 + 2

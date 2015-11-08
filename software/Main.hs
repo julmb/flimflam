@@ -1,4 +1,3 @@
-import Data.Word
 import qualified Data.ByteString.Lazy as BL
 import Text.Printf
 import System.IO
@@ -8,15 +7,11 @@ import FlimFlam.Memory
 import FlimFlam.FirmwareCommand
 import FlimFlam.Communication
 
--- TODO: see what happens when we write to bootloader flash and read it back before and afterwards
--- TODO: see what happens when we read beyond the address space
 -- TODO: when writing a program, we should probably pad with 0x0000 (align correctly, maybe reject images with odd size), 0x0000 is nop and will skip to bootloader
 -- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
--- TODO: can we use the parser monad Get for something?
--- TODO: can we get rid of most of the bytestring dependencies, or at least the qualified import
 
-data Command = Program | Configure | Dump MemoryType Word16 Word16 | Load MemoryType Word16 | Command FirmwareCommand Integer deriving (Eq, Show, Read)
+data Command = Program | Configure | Dump MemoryType Integer Integer | Load MemoryType Integer | Command FirmwareCommand Integer deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()
 executeCommand context (Dump memoryType position length) = do
