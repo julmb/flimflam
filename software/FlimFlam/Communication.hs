@@ -1,5 +1,6 @@
 module FlimFlam.Communication where
 
+import Numeric.Natural
 import Data.Monoid
 import Data.Binary
 import Data.Binary.Get
@@ -12,13 +13,12 @@ import System.IO
 import System.Ftdi
 import Linca.Basic
 import Linca.Scalar
-import Linca.Range
 import FlimFlam.Memory
 import FlimFlam.FirmwareCommand
 import FlimFlam.DeviceInformation
 import FlimFlam.Exception
 
-executeFirmwareCommand :: Context -> FirmwareCommand -> Integer -> BL.ByteString -> IO BL.ByteString
+executeFirmwareCommand :: Context -> FirmwareCommand -> Natural -> BL.ByteString -> IO BL.ByteString
 executeFirmwareCommand context command responseLength commandData = do
 	hPutStrLn stderr $ printf "executing firmware command %s, expected response length %d..." (show command) responseLength
 	send context (encode command)
@@ -36,36 +36,33 @@ executeFirmwareCommand context command responseLength commandData = do
 getDeviceInformation :: Context -> IO DeviceInformation
 getDeviceInformation context = executeFirmwareCommand context GetDeviceInformation deviceInformationLength mempty >>= return . decode
 
--- TODO: we don't need the lower bound if it's a Natural
 -- TODO: shorten where part
-readPage :: Context -> DeviceInformation -> MemoryType -> Integer -> IO BL.ByteString
+readPage :: Context -> DeviceInformation -> MemoryType -> Natural -> IO BL.ByteString
 readPage context deviceInformation memoryType pageIndex
-	| outside pageRange pageIndex = rangeError "readPage" "pageIndex" pageRange pageIndex
+	| pageIndex >= pageCount = error $ printf "readPage: parameter pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
 	| otherwise = executeFirmwareCommand context (ReadPage memoryType (fromIntegral pageIndex)) pageLength mempty
 	where
 		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-		pageRange = range 0 pageCount
 
-writePage :: Context -> DeviceInformation -> MemoryType -> Integer -> BL.ByteString -> IO ()
+writePage :: Context -> DeviceInformation -> MemoryType -> Natural -> BL.ByteString -> IO ()
 writePage context deviceInformation memoryType pageIndex pageData
-	| outside pageRange pageIndex = rangeError "writePage" "pageIndex" pageRange pageIndex
+	| pageIndex >= pageCount = error $ printf "writePage: parameter pageIndex (0x%X) was greater than or equal to the page count (0x%X)" pageIndex pageCount
 	| pageLength /= pageDataLength = error $ printf "writePage: length of parameter pageData (0x%X) did not match page length (0x%X)" pageDataLength pageLength
 	| otherwise = executeFirmwareCommand context (WritePage memoryType (fromIntegral pageIndex)) 0 pageData >> return ()
 	where
 		pageCount = memoryPageCount $ memoryInformation deviceInformation memoryType
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
-		pageRange = range 0 pageCount
 		pageDataLength = fromIntegral (BL.length pageData)
 
 
 -- TODO: error handling, or is the low-level one enough? what is missing here?
-readFromPage :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> Integer -> IO BL.ByteString
+readFromPage :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> Natural -> IO BL.ByteString
 readFromPage context deviceInformation memoryType index offset length = do
 	pageData <- readPage context deviceInformation memoryType index
 	return $ BL.take (fromIntegral length) $ BL.drop (fromIntegral offset) $ pageData
 
-writeToPage :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> BL.ByteString -> IO ()
+writeToPage :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> BL.ByteString -> IO ()
 writeToPage context deviceInformation memoryType index offset chunk
 	| offset == 0 && chunkLength == pageLength = writePage context deviceInformation memoryType index chunk
 	| otherwise = do
@@ -77,7 +74,7 @@ writeToPage context deviceInformation memoryType index offset chunk
 		chunkLength = fromIntegral (BL.length chunk)
 
 
-readMemory :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> IO BL.ByteString
+readMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> IO BL.ByteString
 readMemory _ _ _ _ 0 = return mempty
 readMemory context deviceInformation memoryType offset length = do
 	let (pageIndex, pageOffset) = normalize pageLength (0, offset)
@@ -88,7 +85,7 @@ readMemory context deviceInformation memoryType offset length = do
 	where
 		pageLength = memoryPageLength $ memoryInformation deviceInformation memoryType
 
-writeMemory :: Context -> DeviceInformation -> MemoryType -> Integer -> Integer -> BL.ByteString -> IO ()
+writeMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> BL.ByteString -> IO ()
 writeMemory _ _ _ _ 0 _ = return ()
 writeMemory context deviceInformation memoryType offset length chunk = do
 	when (length > chunkLength) $

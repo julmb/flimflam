@@ -1,3 +1,4 @@
+import Numeric.Natural
 import qualified Data.ByteString.Lazy as BL
 import Text.Printf
 import System.IO
@@ -11,7 +12,7 @@ import FlimFlam.Communication
 -- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
 
-data Command = Program | Configure | Dump MemoryType Integer Integer | Load MemoryType Integer | Command FirmwareCommand Integer deriving (Eq, Show, Read)
+data Command = Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()
 executeCommand context (Dump memoryType position length) = do
