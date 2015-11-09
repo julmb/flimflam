@@ -10,7 +10,7 @@ import FlimFlam.Communication
 -- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
 
-data Command = Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
+data Command = Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural | DeviceInformation deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()
 executeCommand context (Dump memoryType position length) = do
@@ -20,6 +20,7 @@ executeCommand context (Load memoryType position) = do
 	deviceInformation <- getDeviceInformation context
 	BL.getContents >>= writeMemory context deviceInformation memoryType position
 executeCommand context (Command command responseLength) = BL.getContents >>= executeFirmwareCommand context command responseLength >>= BL.putStr
+executeCommand context DeviceInformation = getDeviceInformation context >>= print
 
 -- TODO: add help screen
 main :: IO ()

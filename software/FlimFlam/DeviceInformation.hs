@@ -1,13 +1,17 @@
 module FlimFlam.DeviceInformation where
 
 import Numeric.Natural
-import Data.Maybe
 import Data.List
 import Data.Binary
 import Data.Binary.Get
+import Text.Printf
+import Linca.Basic
 import FlimFlam.Memory
 
-data MemoryInformation = MemoryInformation { memoryPageCount :: Natural, memoryPageLength :: Natural } deriving (Eq, Show, Read)
+data MemoryInformation = MemoryInformation { pageCount :: Natural, pageLength :: Natural }
+
+instance Show MemoryInformation where
+	show memoryInformation = printf "page count = 0x%X, page length = 0x%X" (pageCount memoryInformation) (pageLength memoryInformation)
 
 instance Binary MemoryInformation where
 	put = undefined
@@ -19,14 +23,52 @@ instance Binary MemoryInformation where
 memoryInformationLength :: Natural
 memoryInformationLength = 2 + 2
 
-newtype DeviceInformation = DeviceInformation [MemoryInformation] deriving (Eq, Show, Read)
+data DeviceInformation =
+	DeviceInformation
+	{
+		memoryInformation :: MemoryType -> MemoryInformation,
+		signature :: (Word8, Word8, Word8),
+		calibration :: Word8,
+		lowFuse :: Word8,
+		highFuse :: Word8,
+		extendedFuse :: Word8,
+		lock :: Word8
+	}
+
+instance Show DeviceInformation where
+	show deviceInformation = unlines (map memoryLine memoryTypes ++ [signatureLine, calibrationLine, fuseLine, lockLine]) where
+		memoryLine memoryType = printf "memory %s: %s" (show memoryType) (show (memoryInformation deviceInformation memoryType))
+		(signature0, signature1, signature2) = signature deviceInformation
+		signatureLine = printf "signature: 0x%02X 0x%02X 0x%02X" signature0 signature1 signature2
+		calibrationLine = printf "calibration: 0x%02X" (calibration deviceInformation)
+		fuseLine = printf "fuses: low fuse = 0x%02X, high fuse = 0x%02X, extended fuse = 0x%02X" (lowFuse deviceInformation) (highFuse deviceInformation) (extendedFuse deviceInformation)
+		lockLine = printf "lock: 0x%02X" (lock deviceInformation)
 
 instance Binary DeviceInformation where
 	put = undefined
-	get = traverse (const get) memoryTypes >>= return . DeviceInformation
+	get = do
+		let entry memoryType = do
+			memoryInformation <- get;
+			return (memoryType, memoryInformation)
+		table <- traverse entry memoryTypes
+		signature0 <- getWord8
+		calibration <- getWord8
+		signature1 <- getWord8
+		skip 1
+		signature2 <- getWord8
+		skip 11
+		lowFuse <- getWord8
+		lock <- getWord8
+		extendedFuse <- getWord8
+		highFuse <- getWord8
+		skip 12
+		return $ DeviceInformation (retrieve table) (signature0, signature1, signature2) calibration lowFuse highFuse extendedFuse lock
 
 deviceInformationLength :: Natural
-deviceInformationLength = genericLength memoryTypes * memoryInformationLength
+deviceInformationLength = genericLength memoryTypes * memoryInformationLength + 0x10 + 0x10
 
-memoryInformation :: DeviceInformation -> MemoryType -> MemoryInformation
-memoryInformation (DeviceInformation memoryInformation) memoryType = fromJust (lookup memoryType (zip memoryTypes memoryInformation))
+memoryPageCount :: DeviceInformation -> MemoryType -> Natural
+memoryPageCount deviceInformation memoryType = pageCount (memoryInformation deviceInformation memoryType)
+
+memoryPageLength :: DeviceInformation -> MemoryType -> Natural
+memoryPageLength deviceInformation memoryType = pageLength (memoryInformation deviceInformation memoryType)
