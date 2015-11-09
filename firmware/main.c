@@ -10,8 +10,8 @@
 // display display = display_initialize(pin_initialize(port_initialize(port_c), 5), pin_initialize(port_initialize(port_c), 4), pin_initialize(port_initialize(port_c), 3), port_initialize(port_d));
 // display_printf(display, "0x%04X", reset_type);
 
-typedef enum { get_page_count = 0x0001, get_page_length = 0x0002, read_page = 0x0003, write_page = 0x0004 } command;
-typedef enum { flash = 0x0001, eeprom = 0x0002, calibration = 0x0003, fuse = 0x0004, lock = 0x0005, signature = 0x0006 } memory;
+typedef enum { get_device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
+typedef enum { flash = 0x0001, eeprom = 0x0002 } memory;
 
 void usart_write_checked(void* data, size_t length)
 {
@@ -19,10 +19,6 @@ void usart_write_checked(void* data, size_t length)
 
 	usart_write(data, length);
 	usart_write(&crc, sizeof(crc));
-}
-void usart_write_checked_size(size_t size)
-{
-	usart_write_checked(&size, sizeof(size));
 }
 
 void loader()
@@ -39,28 +35,25 @@ void loader()
 		// TODO: add proper error handling? or is that not neccessary since the loader is locked anyways? do some experiments!
 		switch (command)
 		{
-			case get_page_count:
+			case get_device_information:
 			{
-				memory memory;
-				if (usart_read(&memory, sizeof(memory))) break;
+				uint16_t crc = 0;
 
-				switch (memory)
-				{
-					case flash: usart_write_checked_size(FLASH_PAGE_COUNT); break;
-					case eeprom: usart_write_checked_size(EEPROM_PAGE_COUNT); break;
-				}
-				break;
-			}
-			case get_page_length:
-			{
-				memory memory;
-				if (usart_read(&memory, sizeof(memory))) break;
+				size_t memory_information[] = { FLASH_PAGE_COUNT, FLASH_PAGE_LENGTH, EEPROM_PAGE_COUNT, EEPROM_PAGE_LENGTH };
+				usart_write(memory_information, sizeof(memory_information));
+				crc = crc16(memory_information, sizeof(memory_information), crc);
 
-				switch (memory)
-				{
-					case flash: usart_write_checked_size(FLASH_PAGE_LENGTH); break;
-					case eeprom: usart_write_checked_size(EEPROM_PAGE_LENGTH); break;
-				}
+				uint8_t signature[SIGNATURE_LENGTH];
+				signature_read(signature);
+				usart_write(signature, sizeof(signature));
+				crc = crc16(signature, sizeof(signature), crc);
+
+				uint8_t fuse[FUSE_LENGTH];
+				fuse_read(fuse);
+				usart_write(fuse, sizeof(fuse));
+				crc = crc16(fuse, sizeof(fuse), crc);
+
+				usart_write(&crc, sizeof(crc));
 				break;
 			}
 			case read_page:
