@@ -9,6 +9,7 @@ import FlimFlam.Communication
 -- TODO: when writing a program, we should probably pad with 0x0000 (align correctly, maybe reject images with odd size), 0x0000 is nop and will skip to bootloader
 -- TODO: should we be able to parse hex? or just add the objcopy stuff to the makefile for easy binary generation?
 -- TODO: add flimflam execution to application makefile to automatically flash the MCU
+-- TODO: add verification after writing memory
 
 data Command = Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural | DeviceInformation deriving (Eq, Show, Read)
 
