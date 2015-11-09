@@ -5,14 +5,14 @@ import Data.Monoid
 import Data.Binary
 import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
-import qualified Linca.ByteString.Lazy as BL
 import Control.Monad
 import Control.Exception
 import Text.Printf
 import System.IO
 import System.Ftdi
-import Linca.Basic
 import Linca.Scalar
+import qualified Linca.ByteString as BL
+import Linca.Cryptography
 import FlimFlam.Memory
 import FlimFlam.FirmwareCommand
 import FlimFlam.DeviceInformation

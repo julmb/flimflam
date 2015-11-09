@@ -5,7 +5,7 @@ import Data.List
 import Data.Binary
 import Data.Binary.Get
 import Text.Printf
-import Linca.Basic
+import Linca.List
 import FlimFlam.Memory
 
 data MemoryInformation = MemoryInformation { pageCount :: Natural, pageLength :: Natural }

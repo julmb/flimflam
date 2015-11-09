@@ -2,7 +2,7 @@ module FlimFlam.Memory where
 
 import Data.Binary
 import Data.Binary.Put
-import Linca.Basic
+import Linca.List
 
 data MemoryType = Flash | Eeprom deriving (Eq, Show, Read, Enum, Bounded)
 
