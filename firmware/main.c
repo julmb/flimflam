@@ -77,7 +77,7 @@ void boot_loader()
 
 		switch (command)
 		{
-			case exit: return;
+			case exit: usart_write_checked(0, 0); return;
 			case read_device_information: do_read_device_information(); break;
 			case read_page:
 			case write_page:
