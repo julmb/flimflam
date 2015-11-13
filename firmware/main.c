@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <crc.h>
 
-typedef enum { exit = 0x0000, device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
+typedef enum { exit = 0x0000, read_device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
 typedef enum { flash = 0x0000, eeprom = 0x0001 } memory;
 
 void usart_write_checked(void* data, size_t length)
@@ -14,7 +14,7 @@ void usart_write_checked(void* data, size_t length)
 	usart_write(&crc, sizeof(crc));
 }
 
-void do_device_information()
+void do_read_device_information()
 {
 	uint16_t crc = 0;
 
@@ -78,7 +78,7 @@ void boot_loader()
 		switch (command)
 		{
 			case exit: return;
-			case device_information: do_device_information(); break;
+			case read_device_information: do_read_device_information(); break;
 			case read_page:
 			case write_page:
 			{
