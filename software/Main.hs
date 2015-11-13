@@ -18,25 +18,18 @@ import FlimFlam.Communication
 -- TODO: make naming more consistent
 -- TODO: does it make sense to extract the multiplication of pageCount and pageLength to get the memoryLength?
 
-data Command =
-	Program |
-	Configure |
-	Information |
-	Dump MemoryType Natural Natural |
-	Load MemoryType Natural |
-	Command FirmwareCommand Natural
-	deriving (Eq, Show, Read)
+data Command = Program | Configure | Information | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()
 executeCommand context Program = do
 	deviceInformation <- readDeviceInformation context
-	let programLength = FlimFlam.DeviceInformation.programLength deviceInformation
-	programData <- BL.getContents
-	let programDataLength = fromIntegral $ BL.length programData
-	when (programDataLength > programLength) $
-		error $ printf "the program data length (0x%X) was greater than the program length (0x%X)" programDataLength programLength
-	let padding = BL.replicate (fromIntegral (programLength - programDataLength)) 0x00
-	writeMemory context deviceInformation Flash 0 $ programData <> padding
+	let applicationLength = FlimFlam.DeviceInformation.applicationLength deviceInformation
+	applicationData <- BL.getContents
+	let applicationDataLength = fromIntegral $ BL.length applicationData
+	when (applicationDataLength > applicationLength) $
+		error $ printf "the application data length (0x%X) was greater than the application length (0x%X)" applicationDataLength applicationLength
+	let padding = BL.replicate (fromIntegral (applicationLength - applicationDataLength)) 0x00
+	writeMemory context deviceInformation Flash 0 $ applicationData <> padding
 executeCommand context Configure = do
 	deviceInformation <- readDeviceInformation context
 	let configurationLength = memoryPageCount deviceInformation Eeprom * memoryPageLength deviceInformation Eeprom
