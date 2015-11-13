@@ -22,7 +22,7 @@ void device_information()
 	usart_write(memory_information, sizeof(memory_information));
 	crc = crc16(memory_information, sizeof(memory_information), crc);
 
-	uint16_t program_length = PROGRAM_LENGTH;
+	size_t program_length = PROGRAM_LENGTH;
 	usart_write(&program_length, sizeof(program_length));
 	crc = crc16(&program_length, sizeof(program_length), crc);
 
