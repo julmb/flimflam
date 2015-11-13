@@ -16,6 +16,7 @@ import FlimFlam.Communication
 -- TODO: add writeVerify function to use for the high-level commands Program and Configure
 -- TODO: resolve various name conflicts
 -- TODO: make naming more consistent
+-- TODO: does it make sense to extract the multiplication of pageCount and pageLength to get the memoryLength?
 
 data Command = Program | Configure | DeviceInformation | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
@@ -28,6 +29,14 @@ executeCommand context Program = do
 	when (programDataLength > programLength) $ error $ printf "the program data length (0x%X) was greater than the program length (0x%X)" programDataLength programLength
 	let padding = BL.replicate (fromIntegral (programLength - programDataLength)) 0x00
 	writeMemory context deviceInformation Flash 0 $ programData <> padding
+executeCommand context Configure = do
+	deviceInformation <- getDeviceInformation context
+	let configurationLength = DI.memoryPageCount deviceInformation Eeprom * DI.memoryPageLength deviceInformation Eeprom
+	configurationData <- BL.getContents
+	let configurationDataLength = fromIntegral $ BL.length configurationData
+	when (configurationDataLength > configurationLength) $ error $ printf "the configuration data length (0x%X) was greater than the configuration length (0x%X)" configurationDataLength configurationLength
+	let padding = BL.replicate (fromIntegral (configurationLength - configurationDataLength)) 0x00
+	writeMemory context deviceInformation Eeprom 0 $ configurationData <> padding
 executeCommand context DeviceInformation = getDeviceInformation context >>= putStr . show
 executeCommand context (Dump memoryType position length) = do
 	deviceInformation <- getDeviceInformation context
