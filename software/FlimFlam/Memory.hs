@@ -1,4 +1,4 @@
-module FlimFlam.Memory where
+module FlimFlam.Memory (MemoryType (..), memoryTypes) where
 
 import Data.Binary
 import Data.Binary.Put

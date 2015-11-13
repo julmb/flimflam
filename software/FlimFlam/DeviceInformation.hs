@@ -1,4 +1,4 @@
-module FlimFlam.DeviceInformation where
+module FlimFlam.DeviceInformation (DeviceInformation, deviceInformationLength, memoryPageCount, memoryPageLength, memoryLength) where
 
 import Numeric.Natural
 import Data.List
@@ -72,3 +72,6 @@ memoryPageCount deviceInformation memoryType = pageCount (memoryInformation devi
 
 memoryPageLength :: DeviceInformation -> MemoryType -> Natural
 memoryPageLength deviceInformation memoryType = pageLength (memoryInformation deviceInformation memoryType)
+
+memoryLength :: DeviceInformation -> MemoryType -> Natural
+memoryLength deviceInformation memoryType = memoryPageCount deviceInformation memoryType * memoryPageLength deviceInformation memoryType

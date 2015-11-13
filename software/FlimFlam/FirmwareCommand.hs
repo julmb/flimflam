@@ -1,4 +1,4 @@
-module FlimFlam.FirmwareCommand where
+module FlimFlam.FirmwareCommand (FirmwareCommand (..)) where
 
 import Data.Word
 import Data.Binary
