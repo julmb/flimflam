@@ -39,10 +39,10 @@ instance Show DeviceInformation where
 	show deviceInformation = unlines (map memoryLine memoryTypes ++ [signatureLine, calibrationLine, fuseLine, lockLine]) where
 		memoryLine memoryType = printf "memory %s: %s" (show memoryType) (show (memoryInformation deviceInformation memoryType))
 		(signature0, signature1, signature2) = signature deviceInformation
-		signatureLine = printf "signature: 0x%02X 0x%02X 0x%02X" signature0 signature1 signature2
-		calibrationLine = printf "calibration: 0x%02X" (calibration deviceInformation)
-		fuseLine = printf "fuses: low fuse = 0x%02X, high fuse = 0x%02X, extended fuse = 0x%02X" (lowFuse deviceInformation) (highFuse deviceInformation) (extendedFuse deviceInformation)
-		lockLine = printf "lock: 0x%02X" (lock deviceInformation)
+		signatureLine = printf "signature: bytes = 0x%02X 0x%02X 0x%02X" signature0 signature1 signature2
+		calibrationLine = printf "calibration: byte = 0x%02X" (calibration deviceInformation)
+		fuseLine = printf "fuses: low = 0x%02X, high = 0x%02X, extended = 0x%02X" (lowFuse deviceInformation) (highFuse deviceInformation) (extendedFuse deviceInformation)
+		lockLine = printf "lock: byte = 0x%02X" (lock deviceInformation)
 
 instance Binary DeviceInformation where
 	put = undefined

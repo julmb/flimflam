@@ -21,9 +21,10 @@ executeCommand context (Load memoryType position) = do
 	deviceInformation <- getDeviceInformation context
 	BL.getContents >>= writeMemory context deviceInformation memoryType position
 executeCommand context (Command command responseLength) = BL.getContents >>= executeFirmwareCommand context command responseLength >>= BL.putStr
-executeCommand context DeviceInformation = getDeviceInformation context >>= print
+executeCommand context DeviceInformation = getDeviceInformation context >>= putStr . show
 
 -- TODO: add help screen
+-- TODO: pass device index, or even enable listing devices? put that into ftdihs?
 main :: IO ()
 main = do
 	let device = Device { vendorID = 0x0403, productID = 0x6001, System.Ftdi.index = 0}
