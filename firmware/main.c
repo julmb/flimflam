@@ -22,9 +22,9 @@ void do_read_device_information()
 	usart_write(memory_information, sizeof(memory_information));
 	crc = crc16(memory_information, sizeof(memory_information), crc);
 
-	size_t program_length = PROGRAM_LENGTH;
-	usart_write(&program_length, sizeof(program_length));
-	crc = crc16(&program_length, sizeof(program_length), crc);
+	size_t application_length = APPLICATION_LENGTH;
+	usart_write(&application_length, sizeof(application_length));
+	crc = crc16(&application_length, sizeof(application_length), crc);
 
 	uint8_t signature[SIGNATURE_LENGTH];
 	signature_read(signature);
@@ -118,5 +118,5 @@ void main()
 
 	if (reset_type == external) boot_loader();
 
-	start();
+	application();
 }
