@@ -3,8 +3,8 @@
 #include <memory.h>
 #include <crc.h>
 
-typedef enum { get_device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
-typedef enum { flash = 0x0001, eeprom = 0x0002 } memory;
+typedef enum { exit = 0x0000, device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
+typedef enum { flash = 0x0000, eeprom = 0x0001 } memory;
 
 void usart_write_checked(void* data, size_t length)
 {
@@ -14,7 +14,7 @@ void usart_write_checked(void* data, size_t length)
 	usart_write(&crc, sizeof(crc));
 }
 
-void device_information()
+void do_device_information()
 {
 	uint16_t crc = 0;
 
@@ -38,26 +38,26 @@ void device_information()
 
 	usart_write(&crc, sizeof(crc));
 }
-void read_flash(uint8_t page_index)
+void do_read_flash(uint8_t page_index)
 {
 	uint8_t data[FLASH_PAGE_LENGTH];
 	flash_read_page(page_index, data);
 	usart_write_checked(&data, sizeof(data));
 }
-void read_eeprom(uint8_t page_index)
+void do_read_eeprom(uint8_t page_index)
 {
 	uint8_t data[EEPROM_PAGE_LENGTH];
 	eeprom_read_page(page_index, data);
 	usart_write_checked(&data, sizeof(data));
 }
-void write_flash(uint8_t page_index)
+void do_write_flash(uint8_t page_index)
 {
 	uint8_t data[FLASH_PAGE_LENGTH];
 	usart_read(&data, sizeof(data));
 	flash_write_page(page_index, &data);
 	usart_write_checked(0, 0);
 }
-void write_eeprom(uint8_t page_index)
+void do_write_eeprom(uint8_t page_index)
 {
 	uint8_t data[EEPROM_PAGE_LENGTH];
 	usart_read(&data, sizeof(data));
@@ -65,7 +65,7 @@ void write_eeprom(uint8_t page_index)
 	usart_write_checked(0, 0);
 }
 
-void loader()
+void boot_loader()
 {
 	// enable USART with a divider of 64 * 16, giving about 1 kBd/MHz
 	usart_initialize(1, 1, 0x003F, 0);
@@ -77,7 +77,8 @@ void loader()
 
 		switch (command)
 		{
-			case get_device_information: device_information(); break;
+			case exit: return;
+			case device_information: do_device_information(); break;
 			case read_page:
 			case write_page:
 			{
@@ -92,15 +93,15 @@ void loader()
 					case read_page:
 						switch (memory)
 						{
-							case flash: read_flash(page_index); break;
-							case eeprom: read_eeprom(page_index); break;
+							case flash: do_read_flash(page_index); break;
+							case eeprom: do_read_eeprom(page_index); break;
 						}
 						break;
 					case write_page:
 						switch (memory)
 						{
-							case flash: write_flash(page_index); break;
-							case eeprom: write_eeprom(page_index); break;
+							case flash: do_write_flash(page_index); break;
+							case eeprom: do_write_eeprom(page_index); break;
 						}
 						break;
 				}
@@ -115,7 +116,7 @@ void main()
 {
 	reset_type reset_type = initialize();
 
-	if (reset_type == external) loader();
+	if (reset_type == external) boot_loader();
 
 	start();
 }
