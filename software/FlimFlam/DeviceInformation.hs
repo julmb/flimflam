@@ -1,4 +1,4 @@
-module FlimFlam.DeviceInformation (DeviceInformation, deviceInformationLength, memoryPageCount, memoryPageLength, memoryLength) where
+module FlimFlam.DeviceInformation (DeviceInformation (..), deviceInformationLength, memoryPageCount, memoryPageLength) where
 
 import Numeric.Natural
 import Data.List
@@ -27,6 +27,7 @@ data DeviceInformation =
 	DeviceInformation
 	{
 		memoryInformation :: MemoryType -> MemoryInformation,
+		programLength :: Natural,
 		signature :: (Word8, Word8, Word8),
 		calibration :: Word8,
 		lowFuse :: Word8,
@@ -36,8 +37,9 @@ data DeviceInformation =
 	}
 
 instance Show DeviceInformation where
-	show deviceInformation = unlines (map memoryLine memoryTypes ++ [signatureLine, calibrationLine, fuseLine, lockLine]) where
+	show deviceInformation = unlines (map memoryLine memoryTypes ++ [programLengthLine, signatureLine, calibrationLine, fuseLine, lockLine]) where
 		memoryLine memoryType = printf "memory %s: %s" (show memoryType) (show (memoryInformation deviceInformation memoryType))
+		programLengthLine = printf "program length: length = 0x%X" (programLength deviceInformation)
 		(signature0, signature1, signature2) = signature deviceInformation
 		signatureLine = printf "signature: bytes = 0x%02X 0x%02X 0x%02X" signature0 signature1 signature2
 		calibrationLine = printf "calibration: byte = 0x%02X" (calibration deviceInformation)
@@ -51,6 +53,7 @@ instance Binary DeviceInformation where
 			memoryInformation <- get;
 			return (memoryType, memoryInformation)
 		table <- traverse entry memoryTypes
+		programLength <- getWord16le
 		signature0 <- getWord8
 		calibration <- getWord8
 		signature1 <- getWord8
@@ -62,16 +65,13 @@ instance Binary DeviceInformation where
 		extendedFuse <- getWord8
 		highFuse <- getWord8
 		skip 12
-		return $ DeviceInformation (retrieve table) (signature0, signature1, signature2) calibration lowFuse highFuse extendedFuse lock
+		return $ DeviceInformation (retrieve table) (fromIntegral programLength) (signature0, signature1, signature2) calibration lowFuse highFuse extendedFuse lock
 
 deviceInformationLength :: Natural
-deviceInformationLength = genericLength memoryTypes * memoryInformationLength + 0x10 + 0x10
+deviceInformationLength = genericLength memoryTypes * memoryInformationLength + 2 + 0x10 + 0x10
 
 memoryPageCount :: DeviceInformation -> MemoryType -> Natural
 memoryPageCount deviceInformation memoryType = pageCount (memoryInformation deviceInformation memoryType)
 
 memoryPageLength :: DeviceInformation -> MemoryType -> Natural
 memoryPageLength deviceInformation memoryType = pageLength (memoryInformation deviceInformation memoryType)
-
-memoryLength :: DeviceInformation -> MemoryType -> Natural
-memoryLength deviceInformation memoryType = memoryPageCount deviceInformation memoryType * memoryPageLength deviceInformation memoryType

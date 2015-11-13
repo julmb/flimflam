@@ -85,7 +85,7 @@ writeToPage context deviceInformation memoryType pageIndex pageOffset chunk
 
 readMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> Natural -> IO BL.ByteString
 readMemory context deviceInformation memoryType offset length
-	| offset + length > totalLength = throwIO $ InputException "readMemory" $ printf "offset + length (0x%X) was greater than the memory length (0x%X)" (offset + length) totalLength
+	| offset + length > memoryLength = throwIO $ InputException "readMemory" $ printf "offset + length (0x%X) was greater than the memory length (0x%X)" (offset + length) memoryLength
 	| length == 0 = return mempty
 	| otherwise = do
 		let (pageIndex, pageOffset) = normalize pageLength (0, offset)
@@ -94,12 +94,13 @@ readMemory context deviceInformation memoryType offset length
 		readRest <- readMemory context deviceInformation memoryType (offset + readLength) (length - readLength)
 		return (readChunk <> readRest)
 	where
+		pageCount = memoryPageCount deviceInformation memoryType
 		pageLength = memoryPageLength deviceInformation memoryType
-		totalLength = memoryLength deviceInformation memoryType
+		memoryLength = pageCount * pageLength
 
 writeMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> BL.ByteString -> IO ()
 writeMemory context deviceInformation memoryType offset chunk
-	| offset + length > totalLength = throwIO $ InputException "writeMemory" $ printf "offset + length (0x%X) was greater than the memory length (0x%X)" (offset + length) totalLength
+	| offset + length > memoryLength = throwIO $ InputException "writeMemory" $ printf "offset + length (0x%X) was greater than the memory length (0x%X)" (offset + length) memoryLength
 	| length == 0 = return ()
 	| otherwise = do
 		let (pageIndex, pageOffset) = normalize pageLength (0, offset)
@@ -107,6 +108,7 @@ writeMemory context deviceInformation memoryType offset chunk
 		writeToPage context deviceInformation memoryType pageIndex pageOffset (BL.take (fromIntegral writeLength) chunk)
 		writeMemory context deviceInformation memoryType (offset + writeLength) (BL.drop (fromIntegral writeLength) chunk)
 	where
+		pageCount = memoryPageCount deviceInformation memoryType
 		pageLength = memoryPageLength deviceInformation memoryType
-		totalLength = memoryLength deviceInformation memoryType
+		memoryLength = pageCount * pageLength
 		length = fromIntegral (BL.length chunk)
