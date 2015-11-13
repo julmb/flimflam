@@ -1,4 +1,4 @@
-module FlimFlam.Communication (executeFirmwareCommand, getDeviceInformation, readPage, writePage, readFromPage, writeToPage, readMemory, writeMemory) where
+module FlimFlam.Communication (executeFirmwareCommand, readDeviceInformation, readPage, writePage, readFromPage, writeToPage, readMemory, writeMemory) where
 
 import Numeric.Natural
 import Data.Monoid
@@ -33,8 +33,8 @@ executeFirmwareCommand context command responseLength commandData = do
 	return response
 
 
-getDeviceInformation :: Context -> IO DeviceInformation
-getDeviceInformation context = executeFirmwareCommand context GetDeviceInformation deviceInformationLength mempty >>= return . decode
+readDeviceInformation :: Context -> IO DeviceInformation
+readDeviceInformation context = executeFirmwareCommand context ReadDeviceInformation deviceInformationLength mempty >>= return . decode
 
 readPage :: Context -> DeviceInformation -> MemoryType -> Natural -> IO BL.ByteString
 readPage context deviceInformation memoryType pageIndex
