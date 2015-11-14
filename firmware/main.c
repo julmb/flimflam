@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <crc.h>
 
-typedef enum { exit = 0x0000, read_device_information = 0x0001, read_page = 0x0002, write_page = 0x0003 } command;
+typedef enum { exit = 0x0000, read_device_information = 0x0001, read_memory_page = 0x0002, write_memory_page = 0x0003 } command;
 typedef enum { flash = 0x0000, eeprom = 0x0001 } memory;
 
 void usart_write_checked(void* data, size_t length)
@@ -14,7 +14,39 @@ void usart_write_checked(void* data, size_t length)
 	usart_write(&crc, sizeof(crc));
 }
 
-void do_read_device_information()
+void read_flash(uint8_t page_index)
+{
+	uint8_t data[FLASH_PAGE_LENGTH];
+	flash_read_page(page_index, data);
+	usart_write_checked(&data, sizeof(data));
+}
+void write_flash(uint8_t page_index)
+{
+	uint8_t data[FLASH_PAGE_LENGTH];
+	usart_read(&data, sizeof(data));
+	flash_write_page(page_index, &data);
+}
+
+void read_eeprom(uint8_t page_index)
+{
+	uint8_t data[EEPROM_PAGE_LENGTH];
+	eeprom_read_page(page_index, data);
+	usart_write_checked(&data, sizeof(data));
+}
+void write_eeprom(uint8_t page_index)
+{
+	uint8_t data[EEPROM_PAGE_LENGTH];
+	usart_read(&data, sizeof(data));
+	eeprom_write_page(page_index, &data);
+}
+
+uint8_t do_exit()
+{
+	usart_write_checked(0, 0);
+
+	return 1;
+}
+uint8_t do_read_device_information()
 {
 	uint16_t crc = 0;
 
@@ -37,32 +69,42 @@ void do_read_device_information()
 	crc = crc16(fuse, sizeof(fuse), crc);
 
 	usart_write(&crc, sizeof(crc));
+
+	return 0;
 }
-void do_read_flash(uint8_t page_index)
+uint8_t do_read_memory_page()
 {
-	uint8_t data[FLASH_PAGE_LENGTH];
-	flash_read_page(page_index, data);
-	usart_write_checked(&data, sizeof(data));
+	memory memory;
+	if (usart_read(&memory, sizeof(memory))) return 0;
+
+	uint8_t page_index;
+	if (usart_read(&page_index, sizeof(page_index))) return 0;
+
+	switch (memory)
+	{
+		case flash: read_flash(page_index); break;
+		case eeprom: read_eeprom(page_index); break;
+	}
+
+	return 0;
 }
-void do_read_eeprom(uint8_t page_index)
+uint8_t do_write_memory_page()
 {
-	uint8_t data[EEPROM_PAGE_LENGTH];
-	eeprom_read_page(page_index, data);
-	usart_write_checked(&data, sizeof(data));
-}
-void do_write_flash(uint8_t page_index)
-{
-	uint8_t data[FLASH_PAGE_LENGTH];
-	usart_read(&data, sizeof(data));
-	flash_write_page(page_index, &data);
+	memory memory;
+	if (usart_read(&memory, sizeof(memory))) return 0;
+
+	uint8_t page_index;
+	if (usart_read(&page_index, sizeof(page_index))) return 0;
+
+	switch (memory)
+	{
+		case flash: write_flash(page_index); break;
+		case eeprom: write_eeprom(page_index); break;
+	}
+
 	usart_write_checked(0, 0);
-}
-void do_write_eeprom(uint8_t page_index)
-{
-	uint8_t data[EEPROM_PAGE_LENGTH];
-	usart_read(&data, sizeof(data));
-	eeprom_write_page(page_index, &data);
-	usart_write_checked(0, 0);
+
+	return 0;
 }
 
 void boot_loader()
@@ -70,43 +112,22 @@ void boot_loader()
 	// enable USART with a divider of 64 * 16, giving about 1 kBd/MHz
 	usart_initialize(1, 1, 0x003F, 0);
 
-	while (1)
+	uint8_t status = 0;
+
+	while (!status)
 	{
 		command command;
 		if (usart_read(&command, sizeof(command))) continue;
 
 		switch (command)
 		{
-			case exit: usart_write_checked(0, 0); return;
-			case read_device_information: do_read_device_information(); break;
-			case read_page:
-			case write_page:
-			{
-				memory memory;
-				if (usart_read(&memory, sizeof(memory))) break;
-
-				uint8_t page_index;
-				if (usart_read(&page_index, sizeof(page_index))) break;
-
-				switch (command)
-				{
-					case read_page:
-						switch (memory)
-						{
-							case flash: do_read_flash(page_index); break;
-							case eeprom: do_read_eeprom(page_index); break;
-						}
-						break;
-					case write_page:
-						switch (memory)
-						{
-							case flash: do_write_flash(page_index); break;
-							case eeprom: do_write_eeprom(page_index); break;
-						}
-						break;
-				}
-			}
+			case exit: status = do_exit(); break;
+			case read_device_information: status = do_read_device_information(); break;
+			case read_memory_page: status = do_read_memory_page(); break;
+			case write_memory_page: status = do_write_memory_page(); break;
 		}
+
+		usart_wait_send();
 	}
 
 	usart_dispose();
