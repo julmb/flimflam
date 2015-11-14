@@ -18,9 +18,11 @@ import FlimFlam.Communication
 -- TODO: make naming more consistent
 -- TODO: does it make sense to extract the multiplication of pageCount and pageLength to get the memoryLength?
 
-data Command = Program | Configure | Information | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
+data Command = Run | Information | Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()
+executeCommand context Run = runApplication context
+executeCommand context Information = readDeviceInformation context >>= putStr . show
 executeCommand context Program = do
 	deviceInformation <- readDeviceInformation context
 	let applicationLength = FlimFlam.DeviceInformation.applicationLength deviceInformation
@@ -39,7 +41,6 @@ executeCommand context Configure = do
 		error $ printf "the configuration data length (0x%X) was greater than the configuration length (0x%X)" configurationDataLength configurationLength
 	let padding = BL.replicate (fromIntegral (configurationLength - configurationDataLength)) 0x00
 	writeMemory context deviceInformation Eeprom 0 $ configurationData <> padding
-executeCommand context Information = readDeviceInformation context >>= putStr . show
 executeCommand context (Dump memoryType position length) = do
 	deviceInformation <- readDeviceInformation context
 	readMemory context deviceInformation memoryType position length >>= BL.putStr
