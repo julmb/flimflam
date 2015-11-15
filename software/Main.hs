@@ -9,6 +9,7 @@ import FlimFlam.Memory
 import FlimFlam.FirmwareCommand
 import FlimFlam.DeviceInformation
 import FlimFlam.Communication
+import FlimFlam.Controller
 
 data Command = Run | Information | Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
