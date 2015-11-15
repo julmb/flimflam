@@ -2,7 +2,7 @@ module FlimFlam.Communication
 (
 	executeFirmwareCommand,
 	runApplication, readDeviceInformation, readMemoryPage, writeMemoryPage,
-	readFromMemoryPage, writeToMemoryPage, readMemory, writeMemory
+	readFromMemoryPage, writeToMemoryPage, readMemory, writeMemory, writeVerifyMemory
 )
 where
 
@@ -120,3 +120,16 @@ writeMemory context deviceInformation memoryType offset chunk
 		pageLength = memoryPageLength deviceInformation memoryType
 		memoryLength = pageCount * pageLength
 		length = fromIntegral (BL.length chunk)
+
+writeVerifyMemory :: Context -> DeviceInformation -> MemoryType -> Natural -> BL.ByteString -> IO ()
+writeVerifyMemory context deviceInformation memoryType offset writeData
+	| offset + length > memoryLength = throwIO $ InputException "writeVerifyMemory" $ printf "offset + length (0x%X) was greater than the memory length (0x%X)" (offset + length) memoryLength
+	| otherwise = do
+		writeMemory context deviceInformation memoryType offset writeData
+		readData <- readMemory context deviceInformation memoryType offset length
+		when (writeData /= readData) $ throwIO VerificationException
+	where
+		pageCount = memoryPageCount deviceInformation memoryType
+		pageLength = memoryPageLength deviceInformation memoryType
+		memoryLength = pageCount * pageLength
+		length = fromIntegral (BL.length writeData)
