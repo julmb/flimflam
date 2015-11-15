@@ -11,6 +11,9 @@ import FlimFlam.DeviceInformation
 import FlimFlam.Communication
 import FlimFlam.Controller
 
+-- TODO: make Controller a library
+-- TODO: adjust firmware to loader utility in naming and architecture
+
 data Command = Run | Information | Program | Configure | Dump MemoryType Natural Natural | Load MemoryType Natural | Command FirmwareCommand Natural deriving (Eq, Show, Read)
 
 executeCommand :: Context -> Command -> IO ()

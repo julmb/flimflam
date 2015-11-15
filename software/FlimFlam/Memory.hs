@@ -4,6 +4,8 @@ import Data.Binary
 import Data.Binary.Put
 import Linca.List
 
+-- TODO: physical: flash, eeprom; logical: program, boot loader, configuration
+
 data MemoryType = Flash | Eeprom deriving (Eq, Show, Read, Enum, Bounded)
 
 instance Binary MemoryType where
