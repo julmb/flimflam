@@ -13,5 +13,5 @@ cabal-version:       >= 1.10
 executable flimflam
   main-is:             Main.hs
   build-depends:       base, bytestring, binary, linca, ftdihs
-  ghc-options:         -Wall -fno-warn-tabs -fno-warn-name-shadowing
+  ghc-options:         -Wall -fno-warn-tabs -fno-warn-name-shadowing -dynamic
   default-language:    Haskell2010
