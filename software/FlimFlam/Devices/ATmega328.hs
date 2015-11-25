@@ -5,9 +5,8 @@ import Data.Binary
 import Data.Binary.Put
 import Data.Binary.Get
 import Linca.List
-import Linca.Size
-import FlimFlam.Access (PagingLength (..), pagingTotalLength, PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
-import FlimFlam.Segment (Segment, rangeSegment, baseSegment, byteSegments)
+import FlimFlam.Access (PagingLength (..), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
+import FlimFlam.Segment (Segment, rangeSegment, baseSegment, byteSegment)
 import FlimFlam.Paging
 import FlimFlam.Memory
 import FlimFlam.Device (Device (Device))
@@ -33,18 +32,12 @@ pagingLength Eeprom   = PagingLength 0x100  0x4
 pagingLength Sigcal   = PagingLength   0x1 0x10
 pagingLength Fuselock = PagingLength   0x1 0x10
 
-instance Size Storage where
-	size = pagingTotalLength . pagingLength
-
 
 data Page = Page Storage Word16 deriving (Eq, Show, Read)
 
 instance Binary Page where
 	put (Page storage pageIndex) = put storage >> putWord16le pageIndex
 	get = undefined
-
-instance Size Page where
-	size (Page storage _) = pageLength $ pagingLength storage
 
 
 data Command = Exit | Read Page | Write Page deriving (Eq, Show, Read)
@@ -57,7 +50,7 @@ instance Binary Command where
 
 responseLength :: Command -> Natural
 responseLength Exit = 0
-responseLength (Read page) = size page
+responseLength (Read (Page storage _)) = pageLength $ pagingLength storage
 responseLength (Write _) = 0
 
 executeCommand :: Context -> Command -> BL.ByteString -> IO BL.ByteString
@@ -81,13 +74,10 @@ segments :: Memory -> [Segment Storage]
 segments Application = [rangeSegment Flash 0x0000 0x7000]
 segments BootLoader = [rangeSegment Flash 0x7000 0x8000]
 segments Configuration = [baseSegment Eeprom 0x400]
-segments Signature = byteSegments Sigcal [0x00, 0x02, 0x04]
-segments Calibration = byteSegments Sigcal [0x01]
-segments Fuses = byteSegments Fuselock [0x00, 0x03, 0x02]
-segments Lock = byteSegments Fuselock [0x01]
-
-instance Size Memory where
-	size = size . segments
+segments Signature = map (byteSegment Sigcal) [0x0, 0x2, 0x4]
+segments Calibration = map (byteSegment Sigcal) [0x1]
+segments Fuses = map (byteSegment Fuselock) [0x0, 0x3, 0x2]
+segments Lock = map (byteSegment Fuselock) [0x1]
 
 
 pagingAccess :: Context -> Storage -> PagingAccess IO

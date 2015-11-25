@@ -9,7 +9,7 @@ import Linca.ByteString
 import FlimFlam.Access
 
 pagedStorageLength :: PagingAccess m -> Natural
-pagedStorageLength = pagingTotalLength . pagingLength
+pagedStorageLength pagingAccess = pageCount (pagingLength pagingAccess) * pageLength (pagingLength pagingAccess)
 
 readPagedStorage :: Monad m => PagingAccess m -> Natural -> Natural -> m BL.ByteString
 readPagedStorage pagingAccess dataOffset dataLength

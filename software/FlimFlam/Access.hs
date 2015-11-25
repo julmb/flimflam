@@ -1,4 +1,4 @@
-module FlimFlam.Access (PagingLength (..), pagingTotalLength, PagingAccess (..), StorageAccess (..), MemoryAccess (..)) where
+module FlimFlam.Access (PagingLength (..), PagingAccess (..), StorageAccess (..), MemoryAccess (..)) where
 
 import Numeric.Natural
 import qualified Data.ByteString.Lazy as BL
@@ -9,9 +9,6 @@ data PagingLength =
 		pageCount :: Natural,
 		pageLength :: Natural
 	}
-
-pagingTotalLength :: PagingLength -> Natural
-pagingTotalLength pagingLength = pageCount pagingLength * pageLength pagingLength
 
 data PagingAccess m =
 	PagingAccess
