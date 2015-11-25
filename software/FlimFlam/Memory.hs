@@ -1,17 +1,34 @@
-module FlimFlam.Memory (MemoryType (..), memoryTypes) where
+module FlimFlam.Memory (storedMemoryAccess) where
 
-import Data.Binary
-import Data.Binary.Put
-import Linca.List
+import Numeric.Natural
+import Data.Monoid
+import qualified Data.ByteString.Lazy as BL
+import Text.Printf
+import Linca.Size
+import FlimFlam.Access
+import FlimFlam.Segment
 
--- TODO: physical: flash, eeprom; logical: program, boot loader, configuration
+storedMemoryLength :: [Segment storage] -> Natural
+storedMemoryLength = size
 
-data MemoryType = Flash | Eeprom deriving (Eq, Show, Read, Enum, Bounded)
+readStoredMemory :: Monad m => (storage -> StorageAccess m) -> [Segment storage] -> m BL.ByteString
+readStoredMemory _ [] = return mempty
+readStoredMemory storageAccess (segment : segments) = do
+	chunk <- readStorage (storageAccess $ storage segment) (offset segment) (size segment)
+	rest <- readStoredMemory storageAccess segments
+	return (chunk <> rest)
 
-instance Binary MemoryType where
-	put Flash  = putWord16le 0x0000
-	put Eeprom = putWord16le 0x0001
-	get = undefined
+writeStoredMemory :: Monad m => (storage -> StorageAccess m) -> [Segment storage] -> BL.ByteString -> m ()
+writeStoredMemory storageAccess segments writeData
+	| fromIntegral (BL.length writeData) /= size segments = error $
+		printf "writeStoredMemory: the data length (0x%X) was not equal to the segments length (0x%X)" (BL.length writeData) (size segments)
+	| otherwise = go segments writeData
+	where
+		go [] _ = return ()
+		go (segment : segments) writeData = do
+			let length = fromIntegral $ size segment
+			writeStorage (storageAccess $ storage segment) (offset segment) (BL.take length writeData)
+			go segments (BL.drop length writeData)
 
-memoryTypes :: [MemoryType]
-memoryTypes = enum
+storedMemoryAccess :: Monad m => (storage -> StorageAccess m) -> [Segment storage] -> MemoryAccess m
+storedMemoryAccess storageAccess segments = MemoryAccess (storedMemoryLength segments) (readStoredMemory storageAccess segments) (writeStoredMemory storageAccess segments)
