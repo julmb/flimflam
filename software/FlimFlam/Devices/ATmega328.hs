@@ -4,6 +4,10 @@ import Numeric.Natural
 import Data.Binary
 import Data.Binary.Put
 import Data.Binary.Get
+import Data.Typeable
+import Control.Monad
+import Control.Exception
+import Text.Printf
 import Linca.List
 import FlimFlam.Access (PagingLength (..), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
 import FlimFlam.Segment (Segment, rangeSegment, baseSegment, byteSegment)
@@ -17,7 +21,16 @@ import System.Ftdi (Context, send, receive)
 import qualified Linca.ByteString as BL
 import Linca.Cryptography
 
-data Storage = Flash | Eeprom | Sigcal | Fuselock deriving (Eq, Ord, Enum, Bounded, Show, Read)
+data ATmega328Exception = ChecksumException Command Word16 Word16 deriving Typeable
+
+instance Show ATmega328Exception where
+	show (ChecksumException command dataChecksum receivedChecksum) = printf
+		"%s: data checksum (0x%04X) did not match received checksum (0x%04X)" (show command) dataChecksum receivedChecksum
+
+instance Exception ATmega328Exception
+
+
+data Storage = Flash | Eeprom | Sigcal | Fuselock deriving (Eq, Show, Read)
 
 instance Binary Storage where
 	put Flash    = putWord16le 0x0000
@@ -62,9 +75,7 @@ executeCommand context command commandData = do
 	appendix <- receive context 2
 	let dataChecksum = BL.fold crc16 response 0
 	let receivedChecksum = runGet getWord16le appendix
---	when (dataChecksum /= receivedChecksum) $ do
---		let message = printf "data checksum (0x%04X) did not match received checksum (0x%04X)" dataChecksum receivedChecksum
---		throwIO $ ResponseException command message
+	when (dataChecksum /= receivedChecksum) $ throwIO (ChecksumException command dataChecksum receivedChecksum)
 	return response
 
 
@@ -90,6 +101,7 @@ storageAccess context storage = pagedStorageAccess (pagingAccess context storage
 
 memoryAccess :: Context -> Memory -> MemoryAccess IO
 memoryAccess context memory = storedMemoryAccess (storageAccess context) (segments memory)
+
 
 device :: Context -> Device Memory
 device context = Device enum show read runApplication (memoryAccess context) where

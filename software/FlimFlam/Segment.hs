@@ -3,7 +3,7 @@ module FlimFlam.Segment (Segment (..), rangeSegment, baseSegment, byteSegment) w
 import Numeric.Natural
 import Text.Printf
 
-data Segment storage = Segment { storage :: storage, offset :: Natural, length :: Natural } deriving (Eq, Show, Read)
+data Segment storage = Segment { storage :: storage, offset :: Natural, length :: Natural }
 
 rangeSegment :: storage -> Natural -> Natural -> Segment storage
 rangeSegment storage lower upper
