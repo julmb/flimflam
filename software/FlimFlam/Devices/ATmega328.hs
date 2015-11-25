@@ -1,25 +1,25 @@
 module FlimFlam.Devices.ATmega328 (device) where
 
 import Numeric.Natural
+import Linca.List
 import Data.Binary
 import Data.Binary.Put
 import Data.Binary.Get
+import qualified Data.ByteString.Lazy as BL
+import qualified Linca.ByteString as BL
 import Data.Typeable
 import Control.Monad
 import Control.Exception
+import Linca.Cryptography
 import Text.Printf
-import Linca.List
+import System.IO
+import System.Ftdi (Context, send, receive)
+
 import FlimFlam.Access (PagingLength (..), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
-import FlimFlam.Segment (Segment, rangeSegment, baseSegment, byteSegment)
+import FlimFlam.Segment
 import FlimFlam.Paging
 import FlimFlam.Memory
 import FlimFlam.Device (Device (Device))
-
-import qualified Data.ByteString.Lazy as BL
-import System.IO
-import System.Ftdi (Context, send, receive)
-import qualified Linca.ByteString as BL
-import Linca.Cryptography
 
 data ATmega328Exception = ChecksumException Command Word16 Word16 deriving Typeable
 

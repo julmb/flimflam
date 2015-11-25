@@ -4,6 +4,7 @@ import Numeric.Natural
 import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import Text.Printf
+
 import FlimFlam.Access
 import FlimFlam.Segment
 

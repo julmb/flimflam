@@ -1,11 +1,12 @@
 module FlimFlam.Paging (pagedStorageAccess) where
 
 import Numeric.Natural
+import Linca.Scalar
 import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
+import qualified Linca.ByteString as BL
 import Text.Printf
-import Linca.Scalar
-import Linca.ByteString
+
 import FlimFlam.Access
 
 pagedStorageLength :: PagingAccess m -> Natural
@@ -33,7 +34,7 @@ writePagedStorage pagingAccess dataOffset writeData
 		writePage pagingAccess pageIndex chunk
 		writePagedStorage pagingAccess (dataOffset + chunkLength) rest
 	| otherwise = do
-		readPage pagingAccess pageIndex >>= return . replace pageOffset chunk >>= writePage pagingAccess pageIndex
+		readPage pagingAccess pageIndex >>= return . BL.replace pageOffset chunk >>= writePage pagingAccess pageIndex
 		writePagedStorage pagingAccess (dataOffset + chunkLength) rest
 	where
 		dataLength = fromIntegral (BL.length writeData)
