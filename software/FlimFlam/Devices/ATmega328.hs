@@ -91,10 +91,12 @@ instance Binary Response where
 
 execute :: Context -> Command -> IO Response
 execute context command = do
-	hPutStrLn stderr $ printf "command: %s" (show command)
+	hPutStr stderr $ show command
 	sendEncode context command
+	hPutStr stderr $ " -> "
 	response <- receiveDecode context (UnknownResponseException command)
-	hPutStrLn stderr $ printf "response: %s" (show response)
+	hPutStr stderr $ show response
+	hPutStrLn stderr ""
 	return response
 
 runApplication :: Context -> IO ()
