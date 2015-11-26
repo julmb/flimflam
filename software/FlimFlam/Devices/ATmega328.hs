@@ -8,12 +8,11 @@ import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
 import qualified Linca.ByteString as BL
 import Data.Typeable
-import Control.Monad
 import Control.Exception
 import Linca.Cryptography
 import Text.Printf
 import System.IO
-import System.Ftdi (Context, send, receive)
+import System.Ftdi (Context, sendEncode, receiveDecode)
 
 import FlimFlam.Access (PagingLength (..), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
 import FlimFlam.Segment
@@ -21,16 +20,24 @@ import FlimFlam.Paging
 import FlimFlam.Memory
 import FlimFlam.Device (Device (Device))
 
-data ATmega328Exception = ChecksumException Command Word16 Word16 deriving Typeable
+data ATmega328Exception =
+	UnknownResponseException Command String |
+	InvalidResponseException Command Response |
+	ResponseErrorException Command |
+	ResponseChecksumException Command Word16 Word16
+	deriving Typeable
 
 instance Show ATmega328Exception where
-	show (ChecksumException command dataChecksum receivedChecksum) = printf
+	show (UnknownResponseException command message) = printf "%s: received an unknown response (%s)" (show command) message
+	show (InvalidResponseException command response) = printf "%s: received an invalid response (%s)" (show command) (show response)
+	show (ResponseErrorException command) = printf "%s: received the error response" (show command)
+	show (ResponseChecksumException command dataChecksum receivedChecksum) = printf
 		"%s: data checksum (0x%04X) did not match received checksum (0x%04X)" (show command) dataChecksum receivedChecksum
 
 instance Exception ATmega328Exception
 
 
-data Storage = Flash | Eeprom | Sigcal | Fuselock deriving (Eq, Show, Read)
+data Storage = Flash | Eeprom | Sigcal | Fuselock deriving Show
 
 instance Binary Storage where
 	put Flash    = putWord16le 0x0000
@@ -46,37 +53,73 @@ pagingLength Sigcal   = PagingLength   0x1 0x10
 pagingLength Fuselock = PagingLength   0x1 0x10
 
 
-data Page = Page Storage Word16 deriving (Eq, Show, Read)
+data Command = Exit | Read Storage Word8 | Write Storage Word8 BL.ByteString
 
-instance Binary Page where
-	put (Page storage pageIndex) = put storage >> putWord16le pageIndex
-	get = undefined
-
-
-data Command = Exit | Read Page | Write Page deriving (Eq, Show, Read)
+instance Show Command where
+	show Exit                              = printf "Exit"
+	show (Read  storage pageIndex)         = printf "Read %s 0x%02X" (show storage) pageIndex
+	show (Write storage pageIndex payload) = printf "Write %s 0x%02X [0x%04X]" (show storage) pageIndex (BL.length payload)
 
 instance Binary Command where
-	put Exit         = putWord16le 0x0000
-	put (Read page)  = putWord16le 0x0001 >> put page
-	put (Write page) = putWord16le 0x0002 >> put page
+	put Exit                              = putWord16le 0x0000
+	put (Read  storage pageIndex)         = putWord16le 0x0001 >> put storage >> putWord8 pageIndex
+	put (Write storage pageIndex payload) = putWord16le 0x0002 >> put storage >> putWord8 pageIndex >> putLazyByteString payload
 	get = undefined
 
-responseLength :: Command -> Natural
-responseLength Exit = 0
-responseLength (Read (Page storage _)) = pageLength $ pagingLength storage
-responseLength (Write _) = 0
 
-executeCommand :: Context -> Command -> BL.ByteString -> IO BL.ByteString
-executeCommand context command commandData = do
-	hPutStrLn stderr $ show command
-	send context (encode command)
-	send context commandData
-	response <- receive context (responseLength command)
-	appendix <- receive context 2
-	let dataChecksum = BL.fold crc16 response 0
-	let receivedChecksum = runGet getWord16le appendix
-	when (dataChecksum /= receivedChecksum) $ throwIO (ChecksumException command dataChecksum receivedChecksum)
+data Response = Error | ExitSuccess | ReadSuccess Word16 BL.ByteString | WriteSuccess
+
+instance Show Response where
+	show Error                           = printf "Error"
+	show ExitSuccess                     = printf "ExitSuccess"
+	show (ReadSuccess checksum pageData) = printf "ReadSuccess 0x%04X [0x%04X]" checksum (BL.length pageData)
+	show WriteSuccess                    = printf "WriteSuccess"
+
+instance Binary Response where
+	get = getWord16le >>= fromId where
+		fromId 0x0000 = return Error
+		fromId 0x0001 = return ExitSuccess
+		fromId 0x0002 = do
+			checksum <- getWord16le
+			length <- getWord16le
+			pageData <- getLazyByteString $ fromIntegral length
+			return $ ReadSuccess checksum pageData
+		fromId 0x0003 = return WriteSuccess
+		fromId responseId = fail $ printf "invalid response id (0x%04X)" responseId
+	put = undefined
+
+
+execute :: Context -> Command -> IO Response
+execute context command = do
+	hPutStrLn stderr $ printf "command: %s" (show command)
+	sendEncode context command
+	response <- receiveDecode context (UnknownResponseException command)
+	hPutStrLn stderr $ printf "response: %s" (show response)
 	return response
+
+runApplication :: Context -> IO ()
+runApplication context = execute context command >>= check where
+	command = Exit
+	check Error = throwIO $ ResponseErrorException command
+	check ExitSuccess = return ()
+	check response = throwIO $ InvalidResponseException command response
+
+readPage :: Context -> Storage -> Natural -> IO BL.ByteString
+readPage context storage pageIndex = execute context command >>= check where
+	command = Read storage (fromIntegral pageIndex)
+	check Error = throwIO $ ResponseErrorException command
+	check (ReadSuccess checksum pageData)
+		| dataChecksum /= checksum = throwIO $ ResponseChecksumException command dataChecksum checksum
+		| otherwise = return pageData
+		where dataChecksum = BL.fold crc16 pageData 0
+	check response = throwIO $ InvalidResponseException command response
+
+writePage :: Context -> Storage -> Natural -> BL.ByteString -> IO ()
+writePage context storage pageIndex pageData = execute context command >>= check where
+	command = Write storage (fromIntegral pageIndex) pageData
+	check Error = throwIO $ ResponseErrorException command
+	check WriteSuccess = return ()
+	check response = throwIO $ InvalidResponseException command response
 
 
 data Memory = Application | BootLoader | Configuration | Signature | Calibration | Fuses | Lock deriving (Eq, Ord, Enum, Bounded, Show, Read)
@@ -92,9 +135,7 @@ segments Lock = map (byteSegment Fuselock) [0x1]
 
 
 pagingAccess :: Context -> Storage -> PagingAccess IO
-pagingAccess context storage = PagingAccess (pagingLength storage) readPage writePage where
-	readPage pageIndex = executeCommand context (Read $ Page storage (fromIntegral pageIndex)) mempty
-	writePage pageIndex pageData = executeCommand context (Write $ Page storage (fromIntegral pageIndex)) pageData >> return ()
+pagingAccess context storage = PagingAccess (pagingLength storage) (readPage context storage) (writePage context storage)
 
 storageAccess :: Context -> Storage -> StorageAccess IO
 storageAccess context storage = pagedStorageAccess (pagingAccess context storage)
@@ -104,5 +145,4 @@ memoryAccess context memory = storedMemoryAccess (storageAccess context) (segmen
 
 
 device :: Context -> Device Memory
-device context = Device enum show read runApplication (memoryAccess context) where
-	runApplication = executeCommand context Exit mempty >> return ()
+device context = Device enum show read (runApplication context) (memoryAccess context)
