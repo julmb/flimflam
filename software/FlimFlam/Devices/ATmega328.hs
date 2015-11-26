@@ -67,24 +67,24 @@ instance Binary Command where
 	get = undefined
 
 
-data Response = Error | ExitSuccess | ReadSuccess Word16 BL.ByteString | WriteSuccess
+data Response = Error | SuccessExit | SuccessRead Word16 BL.ByteString | SuccessWrite
 
 instance Show Response where
 	show Error                           = printf "Error"
-	show ExitSuccess                     = printf "ExitSuccess"
-	show (ReadSuccess checksum pageData) = printf "ReadSuccess 0x%04X [0x%04X]" checksum (BL.length pageData)
-	show WriteSuccess                    = printf "WriteSuccess"
+	show SuccessExit                     = printf "SuccessExit"
+	show (SuccessRead checksum pageData) = printf "SuccessRead 0x%04X [0x%04X]" checksum (BL.length pageData)
+	show SuccessWrite                    = printf "SuccessWrite"
 
 instance Binary Response where
 	get = getWord16le >>= fromId where
 		fromId 0x0000 = return Error
-		fromId 0x0001 = return ExitSuccess
+		fromId 0x0001 = return SuccessExit
 		fromId 0x0002 = do
 			checksum <- getWord16le
 			length <- getWord16le
 			pageData <- getLazyByteString $ fromIntegral length
-			return $ ReadSuccess checksum pageData
-		fromId 0x0003 = return WriteSuccess
+			return $ SuccessRead checksum pageData
+		fromId 0x0003 = return SuccessWrite
 		fromId responseId = fail $ printf "invalid response id (0x%04X)" responseId
 	put = undefined
 
@@ -103,14 +103,14 @@ runApplication :: Context -> IO ()
 runApplication context = execute context command >>= check where
 	command = Exit
 	check Error = throwIO $ ResponseErrorException command
-	check ExitSuccess = return ()
+	check SuccessExit = return ()
 	check response = throwIO $ InvalidResponseException command response
 
 readPage :: Context -> Storage -> Natural -> IO BL.ByteString
 readPage context storage pageIndex = execute context command >>= check where
 	command = Read storage (fromIntegral pageIndex)
 	check Error = throwIO $ ResponseErrorException command
-	check (ReadSuccess checksum pageData)
+	check (SuccessRead checksum pageData)
 		| dataChecksum /= checksum = throwIO $ ResponseChecksumException command dataChecksum checksum
 		| otherwise = return pageData
 		where dataChecksum = BL.fold crc16 pageData 0
@@ -120,7 +120,7 @@ writePage :: Context -> Storage -> Natural -> BL.ByteString -> IO ()
 writePage context storage pageIndex pageData = execute context command >>= check where
 	command = Write storage (fromIntegral pageIndex) pageData
 	check Error = throwIO $ ResponseErrorException command
-	check WriteSuccess = return ()
+	check SuccessWrite = return ()
 	check response = throwIO $ InvalidResponseException command response
 
 
