@@ -49,8 +49,8 @@ instance Binary Storage where
 pagingLength :: Storage -> PagingLength
 pagingLength Flash    = PagingLength 0x100 0x80
 pagingLength Eeprom   = PagingLength 0x100  0x4
-pagingLength Sigcal   = PagingLength   0x1 0x10
-pagingLength Fuselock = PagingLength   0x1 0x10
+pagingLength Sigcal   = PagingLength  0x10  0x1
+pagingLength Fuselock = PagingLength  0x10  0x1
 
 
 data Command = Exit | Read Storage Word8 | Write Storage Word8 BL.ByteString
