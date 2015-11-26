@@ -3,108 +3,136 @@
 #include <memory.h>
 #include <crc.h>
 
-typedef enum { exit = 0x0000, read_device_information = 0x0001, read_memory_page = 0x0002, write_memory_page = 0x0003 } command;
-typedef enum { flash = 0x0000, eeprom = 0x0001 } memory;
+typedef enum { flash = 0x0000, eeprom = 0x0001, sigcal = 0x0002, fuselock = 0x0003 } memory;
+typedef enum { exit = 0x0000, read = 0x0001, write = 0x0002 } command;
+typedef enum { error = 0x0000, exit_success = 0x0001, read_success = 0x0002, write_success = 0x0003 } response;
 
-void usart_write_checked(void* data, size_t length)
+void response_error()
 {
+	response response = error;
+
+	usart_write(&response, sizeof(response));
+}
+void response_exit_success()
+{
+	response response = exit_success;
+
+	usart_write(&response, sizeof(response));
+}
+void response_read_success(void* data, size_t length)
+{
+	response response = read_success;
 	uint16_t crc = crc16(data, length, 0);
 
-	usart_write(data, length);
+	usart_write(&response, sizeof(response));
 	usart_write(&crc, sizeof(crc));
+	usart_write(&length, sizeof(length));
+	usart_write(data, length);
+}
+void response_write_success()
+{
+	response response = write_success;
+
+	usart_write(&response, sizeof(response));
 }
 
 void read_flash(uint8_t page_index)
 {
-	uint8_t data[FLASH_PAGE_LENGTH];
-	flash_read_page(page_index, data);
-	usart_write_checked(&data, sizeof(data));
+	if (page_index < FLASH_PAGE_COUNT)
+	{
+		uint8_t data[FLASH_PAGE_LENGTH];
+		flash_read_page(page_index, data);
+		response_read_success(&data, sizeof(data));
+	}
+	else response_error();
 }
 void write_flash(uint8_t page_index)
 {
-	uint8_t data[FLASH_PAGE_LENGTH];
-	usart_read(&data, sizeof(data));
-	flash_write_page(page_index, &data);
+	if (page_index < FLASH_PAGE_COUNT)
+	{
+		uint8_t data[FLASH_PAGE_LENGTH];
+		usart_read(&data, sizeof(data));
+		flash_write_page(page_index, &data);
+		response_write_success();
+	}
+	else response_error();
 }
 
 void read_eeprom(uint8_t page_index)
 {
-	uint8_t data[EEPROM_PAGE_LENGTH];
-	eeprom_read_page(page_index, data);
-	usart_write_checked(&data, sizeof(data));
+	if (page_index < EEPROM_PAGE_COUNT)
+	{
+		uint8_t data[EEPROM_PAGE_LENGTH];
+		eeprom_read_page(page_index, data);
+		response_read_success(&data, sizeof(data));
+	}
+	else response_error();
 }
 void write_eeprom(uint8_t page_index)
 {
-	uint8_t data[EEPROM_PAGE_LENGTH];
-	usart_read(&data, sizeof(data));
-	eeprom_write_page(page_index, &data);
+	if (page_index < EEPROM_PAGE_COUNT)
+	{
+		uint8_t data[EEPROM_PAGE_LENGTH];
+		usart_read(&data, sizeof(data));
+		eeprom_write_page(page_index, &data);
+		response_write_success();
+	}
+	else response_error();
 }
 
-uint8_t do_exit()
+void read_sigcal(uint8_t page_index)
 {
-	usart_write_checked(0, 0);
-
-	return 1;
+	if (page_index == 0)
+	{
+		uint8_t data[SIGCAL_LENGTH];
+		sigcal_read(data);
+		response_read_success(&data, sizeof(data));
+	}
+	else response_error();
 }
-uint8_t do_read_device_information()
+
+void read_fuselock(uint8_t page_index)
 {
-	uint16_t crc = 0;
-
-	size_t memory_information[] = { FLASH_PAGE_COUNT, FLASH_PAGE_LENGTH, EEPROM_PAGE_COUNT, EEPROM_PAGE_LENGTH };
-	usart_write(memory_information, sizeof(memory_information));
-	crc = crc16(memory_information, sizeof(memory_information), crc);
-
-	size_t application_length = APPLICATION_LENGTH;
-	usart_write(&application_length, sizeof(application_length));
-	crc = crc16(&application_length, sizeof(application_length), crc);
-
-	uint8_t signature[SIGNATURE_LENGTH];
-	signature_read(signature);
-	usart_write(signature, sizeof(signature));
-	crc = crc16(signature, sizeof(signature), crc);
-
-	uint8_t fuse[FUSE_LENGTH];
-	fuse_read(fuse);
-	usart_write(fuse, sizeof(fuse));
-	crc = crc16(fuse, sizeof(fuse), crc);
-
-	usart_write(&crc, sizeof(crc));
-
-	return 0;
+	if (page_index == 0)
+	{
+		uint8_t data[FUSELOCK_LENGTH];
+		fuselock_read(data);
+		response_read_success(&data, sizeof(data));
+	}
+	else response_error();
 }
-uint8_t do_read_memory_page()
+
+void do_read()
 {
 	memory memory;
-	if (usart_read(&memory, sizeof(memory))) return 0;
+	if (usart_read(&memory, sizeof(memory))) { response_error(); return; }
 
 	uint8_t page_index;
-	if (usart_read(&page_index, sizeof(page_index))) return 0;
+	if (usart_read(&page_index, sizeof(page_index))) { response_error(); return; }
 
 	switch (memory)
 	{
 		case flash: read_flash(page_index); break;
 		case eeprom: read_eeprom(page_index); break;
+		case sigcal: read_sigcal(page_index); break;
+		case fuselock: read_fuselock(page_index); break;
+		default: response_error();
 	}
-
-	return 0;
 }
-uint8_t do_write_memory_page()
+void do_write()
 {
 	memory memory;
-	if (usart_read(&memory, sizeof(memory))) return 0;
+	if (usart_read(&memory, sizeof(memory))) { response_error(); return; }
 
 	uint8_t page_index;
-	if (usart_read(&page_index, sizeof(page_index))) return 0;
+	if (usart_read(&page_index, sizeof(page_index))) { response_error(); return; }
 
 	switch (memory)
 	{
 		case flash: write_flash(page_index); break;
 		case eeprom: write_eeprom(page_index); break;
+		default: response_error();
 	}
-
-	usart_write_checked(0, 0);
-
-	return 0;
 }
 
 void boot_loader()
@@ -121,10 +149,10 @@ void boot_loader()
 
 		switch (command)
 		{
-			case exit: status = do_exit(); break;
-			case read_device_information: status = do_read_device_information(); break;
-			case read_memory_page: status = do_read_memory_page(); break;
-			case write_memory_page: status = do_write_memory_page(); break;
+			case exit: response_exit_success(); status = 1; break;
+			case read: do_read(); break;
+			case write: do_write(); break;
+			default: response_error();
 		}
 
 		usart_wait_send();
