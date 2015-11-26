@@ -124,7 +124,7 @@ writePage context storage pageIndex pageData = execute context command >>= check
 	check response = throwIO $ InvalidResponseException command response
 
 
-data Memory = Application | BootLoader | Configuration | Signature | Calibration | Fuses | Lock deriving (Eq, Ord, Enum, Bounded, Show, Read)
+data Memory = Application | BootLoader | Configuration | Signature | Calibration | Fuses | Lock deriving (Enum, Bounded, Show, Read)
 
 segments :: Memory -> [Segment Storage]
 segments Application = [rangeSegment Flash 0x0000 0x7000]
