@@ -1,4 +1,4 @@
-module FlimFlam.Devices.ATmega328 (device) where
+module FlimFlam.Devices.ATmega328 (withDevice) where
 
 import Numeric.Natural
 import Linca.List
@@ -12,13 +12,13 @@ import Control.Exception
 import Linca.Cryptography
 import Text.Printf
 import System.IO
-import System.Ftdi (Context, sendEncode, receiveDecode)
+import qualified System.Ftdi as Ftdi
 
-import FlimFlam.Access (PagingLength (..), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
+import FlimFlam.Access (PagingLength (PagingLength), PagingAccess (PagingAccess), StorageAccess, MemoryAccess)
 import FlimFlam.Segment
 import FlimFlam.Paging
 import FlimFlam.Memory
-import FlimFlam.Device (Device (Device))
+import qualified FlimFlam.Device as FlimFlam
 
 data ATmega328Exception =
 	UnknownResponseException Command String |
@@ -89,24 +89,24 @@ instance Binary Response where
 	put = undefined
 
 
-execute :: Context -> Command -> IO Response
+execute :: Ftdi.Context -> Command -> IO Response
 execute context command = do
 	hPutStr stderr $ show command
-	sendEncode context command
+	Ftdi.sendEncode context command
 	hPutStr stderr $ " -> "
-	response <- receiveDecode context (UnknownResponseException command)
+	response <- Ftdi.receiveDecode context (UnknownResponseException command)
 	hPutStr stderr $ show response
 	hPutStrLn stderr ""
 	return response
 
-runApplication :: Context -> IO ()
+runApplication :: Ftdi.Context -> IO ()
 runApplication context = execute context command >>= check where
 	command = Exit
 	check Error = throwIO $ ResponseErrorException command
 	check SuccessExit = return ()
 	check response = throwIO $ InvalidResponseException command response
 
-readPage :: Context -> Storage -> Natural -> IO BL.ByteString
+readPage :: Ftdi.Context -> Storage -> Natural -> IO BL.ByteString
 readPage context storage pageIndex = execute context command >>= check where
 	command = Read storage (fromIntegral pageIndex)
 	check Error = throwIO $ ResponseErrorException command
@@ -116,7 +116,7 @@ readPage context storage pageIndex = execute context command >>= check where
 		where dataChecksum = BL.fold crc16 pageData 0
 	check response = throwIO $ InvalidResponseException command response
 
-writePage :: Context -> Storage -> Natural -> BL.ByteString -> IO ()
+writePage :: Ftdi.Context -> Storage -> Natural -> BL.ByteString -> IO ()
 writePage context storage pageIndex pageData = execute context command >>= check where
 	command = Write storage (fromIntegral pageIndex) pageData
 	check Error = throwIO $ ResponseErrorException command
@@ -136,15 +136,19 @@ segments Fuses = map (byteSegment Fuselock) [0x0, 0x3, 0x2]
 segments Lock = map (byteSegment Fuselock) [0x1]
 
 
-pagingAccess :: Context -> Storage -> PagingAccess IO
+pagingAccess :: Ftdi.Context -> Storage -> PagingAccess IO
 pagingAccess context storage = PagingAccess (pagingLength storage) (readPage context storage) (writePage context storage)
 
-storageAccess :: Context -> Storage -> StorageAccess IO
+storageAccess :: Ftdi.Context -> Storage -> StorageAccess IO
 storageAccess context storage = pagedStorageAccess (pagingAccess context storage)
 
-memoryAccess :: Context -> Memory -> MemoryAccess IO
+memoryAccess :: Ftdi.Context -> Memory -> MemoryAccess IO
 memoryAccess context memory = storedMemoryAccess (storageAccess context) (segments memory)
 
 
-device :: Context -> Device Memory
-device context = Device enum show read (runApplication context) (memoryAccess context)
+withDevice :: (FlimFlam.Device Memory -> IO result) -> IO result
+withDevice action = do
+	let device = Ftdi.Device { Ftdi.vendorID = 0x0403, Ftdi.productID = 0x6001, Ftdi.index = 0}
+	let parameters = Ftdi.Parameters { Ftdi.baudRate = 20000 }
+	let run context = action $ FlimFlam.Device enum show read (runApplication context) (memoryAccess context)
+	Ftdi.withContext device parameters run
