@@ -4,7 +4,7 @@ import Numeric.Natural
 import Linca.Scalar
 import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
-import qualified Linca.ByteString as BL
+import qualified Linca.ByteString.Lazy as BL
 import Text.Printf
 
 import FlimFlam.Access

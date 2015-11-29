@@ -6,7 +6,7 @@ import Data.Binary
 import Data.Binary.Put
 import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
-import qualified Linca.ByteString as BL
+import qualified Linca.ByteString.Lazy as BL
 import Data.Typeable
 import Control.Exception
 import Linca.Cryptography
