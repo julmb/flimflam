@@ -38,24 +38,25 @@ void response_success_write()
 
 inline void read_memory(void (*read_page)(uint8_t page_index, void* data), uint16_t page_count, size_t page_length, uint8_t page_index)
 {
-	if (page_index < page_count)
-	{
-		uint8_t data[page_length];
-		read_page(page_index, data);
-		response_success_read(&data, sizeof(data));
-	}
-	else response_error();
+	if (page_index >= page_count) { response_error(); return; }
+
+	uint8_t data[page_length];
+
+	read_page(page_index, data);
+
+	response_success_read(&data, sizeof(data));
 }
 inline void write_memory(void (*write_page)(uint8_t page_index, void* data), uint16_t page_count, size_t page_length, uint8_t page_index)
 {
-	if (page_index < page_count)
-	{
-		uint8_t data[page_length];
-		usart_read(&data, sizeof(data));
-		write_page(page_index, &data);
-		response_success_write();
-	}
-	else response_error();
+	if (page_index >= page_count) { response_error(); return; }
+
+	uint8_t data[page_length];
+
+	if (usart_read(&data, sizeof(data))) { response_error(); return; }
+
+	write_page(page_index, &data);
+
+	response_success_write();
 }
 
 inline void do_read()
