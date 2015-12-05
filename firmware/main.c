@@ -29,11 +29,13 @@ void response_success_read(void* data, size_t length)
 	usart_write(&length, sizeof(length));
 	usart_write(data, length);
 }
-void response_success_write()
+void response_success_write(void* data, size_t length)
 {
 	response response = success_write;
+	uint16_t crc = crc16(data, length, 0);
 
 	usart_write(&response, sizeof(response));
+	usart_write(&crc, sizeof(crc));
 }
 
 inline void read_memory(void (*read_page)(uint8_t page_index, void* data), uint16_t page_count, size_t page_length, uint8_t page_index)
@@ -56,7 +58,7 @@ inline void write_memory(void (*write_page)(uint8_t page_index, void* data), uin
 
 	write_page(page_index, &data);
 
-	response_success_write();
+	response_success_write(&data, sizeof(data));
 }
 
 inline void do_read()

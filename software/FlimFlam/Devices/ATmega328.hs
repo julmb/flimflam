@@ -67,13 +67,13 @@ instance Binary Command where
 	get = undefined
 
 
-data Response = Error | SuccessExit | SuccessRead Word16 BL.ByteString | SuccessWrite
+data Response = Error | SuccessExit | SuccessRead Word16 BL.ByteString | SuccessWrite Word16
 
 instance Show Response where
 	show Error                           = printf "Error"
 	show SuccessExit                     = printf "SuccessExit"
 	show (SuccessRead checksum pageData) = printf "SuccessRead 0x%04X [0x%04X]" checksum (BL.length pageData)
-	show SuccessWrite                    = printf "SuccessWrite"
+	show (SuccessWrite checksum)         = printf "SuccessWrite 0x%04X" checksum
 
 instance Binary Response where
 	get = getWord16le >>= fromId where
@@ -84,7 +84,9 @@ instance Binary Response where
 			length <- getWord16le
 			pageData <- getLazyByteString $ fromIntegral length
 			return $ SuccessRead checksum pageData
-		fromId 0x0003 = return SuccessWrite
+		fromId 0x0003 = do
+			checksum <- getWord16le
+			return $ SuccessWrite checksum
 		fromId responseId = fail $ printf "invalid response id (0x%04X)" responseId
 	put = undefined
 
@@ -120,7 +122,10 @@ writePage :: Ftdi.Context -> Storage -> Natural -> BL.ByteString -> IO ()
 writePage context storage pageIndex pageData = execute context command >>= check where
 	command = Write storage (fromIntegral pageIndex) pageData
 	check Error = throwIO $ ResponseErrorException command
-	check SuccessWrite = return ()
+	check (SuccessWrite checksum)
+		| dataChecksum /= checksum = throwIO $ ResponseChecksumException command dataChecksum checksum
+		| otherwise = return ()
+		where dataChecksum = BL.fold crc16 pageData 0
 	check response = throwIO $ InvalidResponseException command response
 
 
