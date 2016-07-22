@@ -2,6 +2,8 @@ import Data.List
 import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.Cont
 import System.Environment
 import Text.Printf
 
@@ -15,7 +17,7 @@ execute :: Device memory -> Command memory -> IO ()
 execute device Help = do
 	putStrLn $ printf "commands: Help | Run | Read memory | Write memory"
 	let memoryEntry memory = printf "%s [0x%X]" (showMemory device memory) (memoryLength $ memoryAccess device memory)
-	putStrLn $ printf "memories: %s" (intercalate " | " (map memoryEntry (memories device)))
+	putStrLn $ printf "memories: %s" (intercalate " | " (memoryEntry <$> memories device))
 execute device Run = runApplication device
 execute device (Read memory) = readMemory (memoryAccess device memory) >>= BL.putStr
 execute device (Write memory) = do
@@ -30,7 +32,7 @@ execute device (Write memory) = do
 	when (readData /= writeData) $ error $ printf "the read data was not equal to the written data"
 
 main :: IO ()
-main = do
-	command <- getArgs >>= return . read . unwords
-	let run device = execute device command
-	M328.withDevice run
+main = evalContT $ do
+	device <- M328.withDevice
+	command <- read <$> unwords <$> lift getArgs
+	lift $ execute device command

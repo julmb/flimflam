@@ -8,6 +8,7 @@ import Data.Binary.Get
 import qualified Data.ByteString.Lazy as BL
 import qualified Linca.ByteString.Lazy as BL
 import Data.Typeable
+import Control.Monad.Cont
 import Control.Exception
 import Linca.Cryptography
 import Text.Printf
@@ -135,10 +136,10 @@ segments :: Memory -> [Segment Storage]
 segments Application = [rangeSegment Flash 0x0000 0x7000]
 segments BootLoader = [rangeSegment Flash 0x7000 0x8000]
 segments Configuration = [baseSegment Eeprom 0x400]
-segments Signature = map (byteSegment Sigcal) [0x0, 0x2, 0x4]
-segments Calibration = map (byteSegment Sigcal) [0x1]
-segments Fuses = map (byteSegment Fuselock) [0x0, 0x3, 0x2]
-segments Lock = map (byteSegment Fuselock) [0x1]
+segments Signature = byteSegment Sigcal <$> [0x0, 0x2, 0x4]
+segments Calibration = byteSegment Sigcal <$> [0x1]
+segments Fuses = byteSegment Fuselock <$> [0x0, 0x3, 0x2]
+segments Lock = byteSegment Fuselock <$> [0x1]
 
 
 pagingAccess :: Ftdi.Context -> Storage -> PagingAccess IO
@@ -151,9 +152,9 @@ memoryAccess :: Ftdi.Context -> Memory -> MemoryAccess IO
 memoryAccess context memory = storedMemoryAccess (storageAccess context) (segments memory)
 
 
-withDevice :: (FlimFlam.Device Memory -> IO result) -> IO result
-withDevice action = do
+withDevice :: ContT result IO (FlimFlam.Device Memory)
+withDevice = do
 	let device = Ftdi.Device { Ftdi.vendorID = 0x0403, Ftdi.productID = 0x6001, Ftdi.index = 0}
 	let parameters = Ftdi.Parameters { Ftdi.baudRate = 20000 }
-	let run context = action $ FlimFlam.Device enum show read (runApplication context) (memoryAccess context)
-	Ftdi.withContext device parameters run
+	context <- Ftdi.withContext device parameters
+	return $ FlimFlam.Device enum show read (runApplication context) (memoryAccess context)
