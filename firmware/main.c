@@ -97,7 +97,7 @@ inline void do_write()
 void boot_loader()
 {
 	// enable USART with a divider of 64 * 16, giving about 1 kBd/MHz
-	usart_initialize(1, 1, 0x003F, 0);
+	usart_initialize(1, 1, 0, 0, 0, 0x003F, 0);
 
 	uint8_t status = 0;
 
