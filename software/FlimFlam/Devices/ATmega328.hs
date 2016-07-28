@@ -97,7 +97,7 @@ execute context command = do
 	hPutStr stderr $ show command
 	Ftdi.sendEncode context command
 	hPutStr stderr $ " -> "
-	response <- Ftdi.receiveDecode context (UnknownResponseException command)
+	response <- Ftdi.receiveDecodeOrFail context (throwIO . UnknownResponseException command)
 	hPutStr stderr $ show response
 	hPutStrLn stderr ""
 	return response
