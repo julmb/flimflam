@@ -5,12 +5,16 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Cont
 import System.Environment
+import System.FilePath
+import System.Directory
+import qualified System.Ftdi as Ftdi
 import Text.Printf
 
 import FlimFlam.Access
 import FlimFlam.Device
 import qualified FlimFlam.Devices.ATmega328 as M328
 
+data Configuration = ATmega328Configuration Ftdi.Device Ftdi.Parameters deriving (Show, Read)
 data Command memory = Help | Exit | Read memory | Write memory deriving (Show, Read)
 
 execute :: Device memory -> Command memory -> IO ()
@@ -33,6 +37,10 @@ execute device (Write memory) = do
 
 main :: IO ()
 main = evalContT $ do
-	device <- M328.withDevice
+	homeDirectory <- lift getHomeDirectory
+	let path = homeDirectory </> ".config" </> "flimflam"
+	configuration <- read <$> lift (readFile path)
+	device <- case configuration of
+		ATmega328Configuration device parameters -> M328.withDevice device parameters
 	command <- read <$> unwords <$> lift getArgs
 	lift $ execute device command

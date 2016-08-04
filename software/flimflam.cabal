@@ -12,6 +12,6 @@ cabal-version:       >= 1.10
 
 executable flimflam
   default-language:    Haskell2010
-  build-depends:       base >= 4.9, transformers >= 0.5, mtl >= 2.2, bytestring >= 0.10, binary >= 0.7, linca >= 0.3, ftdihs >= 0.2
+  build-depends:       base >= 4.9, transformers >= 0.5, mtl >= 2.2, filepath >= 1.4, directory >= 1.2, bytestring >= 0.10, binary >= 0.7, linca >= 0.3, ftdihs >= 0.2
   ghc-options:         -Wall -fno-warn-tabs -fno-warn-name-shadowing -dynamic
   main-is:             Main.hs

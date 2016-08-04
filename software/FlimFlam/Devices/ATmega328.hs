@@ -19,7 +19,7 @@ import FlimFlam.Access (PagingLength (PagingLength), PagingAccess (PagingAccess)
 import FlimFlam.Segment
 import FlimFlam.Paging
 import FlimFlam.Memory
-import qualified FlimFlam.Device as FlimFlam
+import FlimFlam.Device (Device (Device))
 
 data ATmega328Exception =
 	UnknownResponseException Command String |
@@ -152,9 +152,7 @@ memoryAccess :: Ftdi.Context -> Memory -> MemoryAccess IO
 memoryAccess context memory = storedMemoryAccess (storageAccess context) (segments memory)
 
 
-withDevice :: ContT result IO (FlimFlam.Device Memory)
-withDevice = do
-	let device = Ftdi.Device { Ftdi.vendorID = 0x0403, Ftdi.productID = 0x6001, Ftdi.index = 0}
-	let parameters = Ftdi.Parameters { Ftdi.baudRate = 20000 }
+withDevice :: Ftdi.Device -> Ftdi.Parameters -> ContT result IO (Device Memory)
+withDevice device parameters = do
 	context <- Ftdi.withContext device parameters
-	return $ FlimFlam.Device enum show read (exitBootLoader context) (memoryAccess context)
+	return $ Device enum show read (exitBootLoader context) (memoryAccess context)
