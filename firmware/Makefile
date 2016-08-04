@@ -10,7 +10,7 @@ offset = 0x7000
 
 lfuse = 0xF7:m
 hfuse = 0xD8:m
-efuse = 0x04:m
-lock = 0x2F:m
+efuse = 0xFC:m
+lock = 0xEF:m
 
 include $(avr)/build/Makefile
