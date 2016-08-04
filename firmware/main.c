@@ -114,7 +114,7 @@ void boot_loader()
 			default: response_error();
 		}
 
-		usart_wait_send();
+		usart_wait_sent();
 	}
 
 	usart_dispose();
