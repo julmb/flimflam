@@ -11,7 +11,7 @@ import FlimFlam.Access
 import FlimFlam.Device
 import qualified FlimFlam.Devices.ATmega328 as M328
 
-data Command memory = Help | Run | Read memory | Write memory deriving (Show, Read)
+data Command memory = Help | Exit | Read memory | Write memory deriving (Show, Read)
 
 execute :: Device memory -> Command memory -> IO ()
 execute device Help = do
