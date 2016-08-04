@@ -102,8 +102,8 @@ execute context command = do
 	hPutStrLn stderr ""
 	return response
 
-runApplication :: Ftdi.Context -> IO ()
-runApplication context = execute context command >>= check where
+exitBootLoader :: Ftdi.Context -> IO ()
+exitBootLoader context = execute context command >>= check where
 	command = Exit
 	check Error = throwIO $ ResponseErrorException command
 	check SuccessExit = return ()
@@ -157,4 +157,4 @@ withDevice = do
 	let device = Ftdi.Device { Ftdi.vendorID = 0x0403, Ftdi.productID = 0x6001, Ftdi.index = 0}
 	let parameters = Ftdi.Parameters { Ftdi.baudRate = 20000 }
 	context <- Ftdi.withContext device parameters
-	return $ FlimFlam.Device enum show read (runApplication context) (memoryAccess context)
+	return $ FlimFlam.Device enum show read (exitBootLoader context) (memoryAccess context)

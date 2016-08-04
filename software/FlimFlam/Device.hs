@@ -8,6 +8,6 @@ data Device memory =
 		memories :: [memory],
 		showMemory :: memory -> String,
 		parseMemory :: String -> memory,
-		runApplication :: IO (),
+		exitBootLoader :: IO (),
 		memoryAccess :: memory -> MemoryAccess IO
 	}

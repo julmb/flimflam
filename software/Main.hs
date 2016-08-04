@@ -15,10 +15,10 @@ data Command memory = Help | Exit | Read memory | Write memory deriving (Show, R
 
 execute :: Device memory -> Command memory -> IO ()
 execute device Help = do
-	putStrLn $ printf "commands: Help | Run | Read memory | Write memory"
+	putStrLn $ printf "commands: Help | Exit | Read memory | Write memory"
 	let memoryEntry memory = printf "%s [0x%X]" (showMemory device memory) (memoryLength $ memoryAccess device memory)
 	putStrLn $ printf "memories: %s" (intercalate " | " (memoryEntry <$> memories device))
-execute device Run = runApplication device
+execute device Exit = exitBootLoader device
 execute device (Read memory) = readMemory (memoryAccess device memory) >>= BL.putStr
 execute device (Write memory) = do
 	let MemoryAccess memoryLength readMemory writeMemory = memoryAccess device memory
