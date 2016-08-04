@@ -61,6 +61,10 @@ inline void write_memory(void (*write_page)(uint8_t page_index, void* data), uin
 	response_success_write(&data, sizeof(data));
 }
 
+inline void do_exit()
+{
+	response_success_exit();
+}
 inline void do_read()
 {
 	memory memory;
@@ -99,22 +103,31 @@ void boot_loader()
 	// enable USART with a divider of 64 * 16, giving about 1 kBd/MHz
 	usart_initialize(1, 1, 0, 0, 0, 0x003F, 0);
 
-	uint8_t status = 0;
-
-	while (!status)
+	while (1)
 	{
+		usart_wait_received();
+
 		command command;
-		if (usart_read(&command, sizeof(command))) continue;
-
-		switch (command)
+		if (usart_read(&command, sizeof(command)))
 		{
-			case exit: response_success_exit(); status = 1; break;
-			case read: do_read(); break;
-			case write: do_write(); break;
-			default: response_error();
-		}
+			response_error();
 
-		usart_wait_sent();
+			usart_wait_sent();
+		}
+		else
+		{
+			switch (command)
+			{
+				case exit: do_exit(); break;
+				case read: do_read(); break;
+				case write: do_write(); break;
+				default: response_error();
+			}
+
+			usart_wait_sent();
+
+			if (command == exit) break;
+		}
 	}
 
 	usart_dispose();
