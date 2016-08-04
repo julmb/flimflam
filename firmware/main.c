@@ -133,7 +133,7 @@ void boot_loader()
 	usart_dispose();
 }
 
-void main()
+int main()
 {
 	reset_type reset_type = initialize();
 
