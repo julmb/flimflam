@@ -33,7 +33,7 @@ execute device (Write memory) = do
 	let writeData = inputData <> padding
 	writeMemory writeData
 	readData <- readMemory
-	when (readData /= writeData) $ error $ printf "the read data was not equal to the written data"
+	when (readData /= writeData) $ error $ "the read data was not equal to the written data"
 
 main :: IO ()
 main = evalContT $ do
