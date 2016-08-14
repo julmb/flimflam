@@ -10,6 +10,7 @@ import qualified Linca.ByteString.Lazy as BL
 import Data.Typeable
 import Control.Monad.Cont
 import Control.Exception
+import Linca.Error
 import Linca.Cryptography
 import Text.Printf
 import System.IO
@@ -29,11 +30,11 @@ data ATmega328Exception =
 	deriving Typeable
 
 instance Show ATmega328Exception where
-	show (UnknownResponseException command message) = printf "%s: received an unknown response (%s)" (show command) message
-	show (InvalidResponseException command response) = printf "%s: received an invalid response (%s)" (show command) (show response)
-	show (ResponseErrorException command) = printf "%s: received the error response" (show command)
-	show (ResponseChecksumException command dataChecksum receivedChecksum) = printf
-		"%s: data checksum (0x%04X) did not match received checksum (0x%04X)" (show command) dataChecksum receivedChecksum
+	show (UnknownResponseException command message)                        = errorMessage (show command) $ printf "received an unknown response (%s)" message
+	show (InvalidResponseException command response)                       = errorMessage (show command) $ printf "received an invalid response (%s)" (show response)
+	show (ResponseErrorException command)                                  = errorMessage (show command) $ printf "received the error response"
+	show (ResponseChecksumException command dataChecksum receivedChecksum) = errorMessage (show command) $ printf
+		"data checksum (0x%04X) did not match received checksum (0x%04X)" dataChecksum receivedChecksum
 
 instance Exception ATmega328Exception
 

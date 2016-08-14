@@ -6,6 +6,7 @@ import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import qualified Linca.ByteString.Lazy as BL
 import Text.Printf
+import Linca.Error
 
 import FlimFlam.Access
 
@@ -14,8 +15,8 @@ pagedStorageLength pagingAccess = pageCount (pagingLength pagingAccess) * pageLe
 
 readPagedStorage :: Monad m => PagingAccess m -> Natural -> Natural -> m BL.ByteString
 readPagedStorage pagingAccess dataOffset dataLength
-	| dataOffset + dataLength > pagedStorageLength pagingAccess = error $
-		printf "readPagedStorage: dataOffset + dataLength (0x%X) was greater than the storage length (0x%X)" (dataOffset + dataLength) (pagedStorageLength pagingAccess)
+	| dataOffset + dataLength > pagedStorageLength pagingAccess = error $ errorMessage "readPagedStorage" $ printf
+		"dataOffset + dataLength (0x%X) was greater than the storage length (0x%X)" (dataOffset + dataLength) (pagedStorageLength pagingAccess)
 	| dataLength == 0 = return mempty
 	| otherwise = do
 		chunk <- readPage pagingAccess pageIndex >>= return . BL.take (fromIntegral chunkLength) . BL.drop (fromIntegral pageOffset)
@@ -27,8 +28,8 @@ readPagedStorage pagingAccess dataOffset dataLength
 
 writePagedStorage :: Monad m => PagingAccess m -> Natural -> BL.ByteString -> m ()
 writePagedStorage pagingAccess dataOffset writeData
-	| dataOffset + dataLength > pagedStorageLength pagingAccess = error $
-		printf "writePagedStorage: dataOffset + dataLength (0x%X) was greater than the storage length (0x%X)" (dataOffset + dataLength) (pagedStorageLength pagingAccess)
+	| dataOffset + dataLength > pagedStorageLength pagingAccess = error $ errorMessage "writePagedStorage" $ printf
+		"dataOffset + dataLength (0x%X) was greater than the storage length (0x%X)" (dataOffset + dataLength) (pagedStorageLength pagingAccess)
 	| dataLength == 0 = return ()
 	| chunkLength == pageLength (pagingLength pagingAccess) = do
 		writePage pagingAccess pageIndex chunk

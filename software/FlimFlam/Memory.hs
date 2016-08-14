@@ -4,6 +4,7 @@ import Numeric.Natural
 import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import Text.Printf
+import Linca.Error
 
 import FlimFlam.Access
 import FlimFlam.Segment
@@ -30,10 +31,10 @@ storedMemoryAccess storageAccess segments
 	| otherwise = MemoryAccess (storedMemoryLength segments) (readStoredMemory storageAccess segments) (checkWriteStoredMemory storageAccess segments)
 	where
 		checkSegment storageAccess (Segment storage offset length)
-			| offset + length > storageLength (storageAccess storage) = error $
-				printf "storedMemoryAccess: offset + length (0x%X) was larger than the storage length (0x%X)" (offset + length) (storageLength $ storageAccess storage)
+			| offset + length > storageLength (storageAccess storage) = error $ errorMessage "storedMemoryAccess" $ printf
+				"offset + length (0x%X) was larger than the storage length (0x%X)" (offset + length) (storageLength $ storageAccess storage)
 			| otherwise = False
 		checkWriteStoredMemory storageAccess segments writeData
-			| fromIntegral (BL.length writeData) /= storedMemoryLength segments = error $
-				printf "writeStoredMemory: the data length (0x%X) was not equal to the segments length (0x%X)" (BL.length writeData) (storedMemoryLength segments)
+			| fromIntegral (BL.length writeData) /= storedMemoryLength segments = error $ errorMessage "writeStoredMemory" $ printf
+				"the data length (0x%X) was not equal to the segments length (0x%X)" (BL.length writeData) (storedMemoryLength segments)
 			| otherwise = writeStoredMemory storageAccess segments writeData
