@@ -33,8 +33,7 @@ instance Show ATmega328Exception where
 	show (UnknownResponseException command message)                        = errorMessage (show command) $ printf "received an unknown response (%s)" message
 	show (InvalidResponseException command response)                       = errorMessage (show command) $ printf "received an invalid response (%s)" (show response)
 	show (ResponseErrorException command)                                  = errorMessage (show command) $ printf "received the error response"
-	show (ResponseChecksumException command dataChecksum receivedChecksum) = errorMessage (show command) $ printf
-		"data checksum (0x%04X) did not match received checksum (0x%04X)" dataChecksum receivedChecksum
+	show (ResponseChecksumException command dataChecksum receivedChecksum) = errorMessage (show command) $ printf "data checksum (0x%04X) did not match received checksum (0x%04X)" dataChecksum receivedChecksum
 
 instance Exception ATmega328Exception
 
@@ -89,7 +88,7 @@ instance Binary Response where
 		fromId 0x0003 = do
 			checksum <- getWord16le
 			return $ SuccessWrite checksum
-		fromId responseId = fail $ printf "invalid response id (0x%04X)" responseId
+		fromId responseId = fail $ printf "unknown response id (0x%04X)" responseId
 	put = undefined
 
 
@@ -98,7 +97,7 @@ execute context command = do
 	hPutStr stderr $ show command
 	Ftdi.sendEncode context command
 	hPutStr stderr $ " -> "
-	response <- Ftdi.receiveDecodeOrFail context (throwIO . UnknownResponseException command)
+	response <- Ftdi.receiveDecode context (UnknownResponseException command)
 	hPutStr stderr $ show response
 	hPutStrLn stderr ""
 	return response
