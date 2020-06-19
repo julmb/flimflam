@@ -1,0 +1,3 @@
+Paging and Memory could maybe use a little less design and overengineering, maybe just provide functions in some module
+retain functionality of being able to write sub-length data at all layers
+is there a way to avoid the heavyweight Access records? maybe type classes?

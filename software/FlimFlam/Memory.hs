@@ -25,6 +25,7 @@ writeStoredMemory storageAccess (Segment storage offset length : segments) write
 	writeStorage (storageAccess storage) offset (BL.take (fromIntegral length) writeData)
 	writeStoredMemory storageAccess segments (BL.drop (fromIntegral length) writeData)
 
+-- TODO: this is a really strange way of error handling, checkSegment should be in the actual guard and checkWriteStoredMemory should be in the function (which can currently be used with incorrect parameters)
 storedMemoryAccess :: Monad m => (storage -> StorageAccess m) -> [Segment storage] -> MemoryAccess m
 storedMemoryAccess storageAccess segments
 	| any (checkSegment storageAccess) segments = undefined
