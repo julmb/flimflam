@@ -15,3 +15,10 @@ executable flimflam
   build-depends:       base >= 4.9, transformers >= 0.5, mtl >= 2.2, filepath >= 1.4, directory >= 1.2, bytestring >= 0.10, binary >= 0.7, linca >= 0.4, ftdihs >= 0.3
   ghc-options:         -Wall -fno-warn-tabs -fno-warn-name-shadowing -dynamic
   main-is:             Main.hs
+  other-modules:
+    FlimFlam.Access
+    FlimFlam.Device
+    FlimFlam.Devices.ATmega328
+    FlimFlam.Memory
+    FlimFlam.Paging
+    FlimFlam.Segment
