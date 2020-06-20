@@ -1,7 +1,6 @@
 module FlimFlam.Memory (storedMemoryAccess) where
 
 import Numeric.Natural
-import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import Text.Printf
 import Linca.Error

@@ -1,5 +1,4 @@
 import Data.List
-import Data.Monoid
 import qualified Data.ByteString.Lazy as BL
 import Control.Monad
 import Control.Monad.Trans
