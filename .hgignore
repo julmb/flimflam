@@ -2,5 +2,5 @@
 
 (^|/)obj$
 (^|/)dist$
-(^|/).stack-work$
-(^|/)stack.yaml.lock$
+(^|/)\.stack-work$
+(^|/)stack\.yaml\.lock$
